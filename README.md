@@ -2,7 +2,9 @@
 
 Turn a written script into natural-sounding narration, on your own computer. Paste a phone greeting, a training video script or a product walkthrough, pick a voice, and get a WAV file you can use. Nothing you type is sent anywhere.
 
-![TTS Studio with a phone greeting script, line 2 lit while it plays](docs/screenshot-light.png)
+**[Download TTS Studio](https://github.com/twogunrock/tts-studio/releases/latest/download/TTS-Studio.zip)** (Windows, Mac, Linux; free) · **[Hear a sample](https://github.com/twogunrock/tts-studio/releases/latest/download/sample-phone-greeting.mp3)**: an 18-second phone greeting, made with the built-in voice
+
+![A phone greeting being created: each line lights up as it's spoken](docs/demo.gif)
 
 It's built for people who need a voice-over and don't want to learn audio software: small businesses, trainers, anyone recording the same kind of message more than once.
 
@@ -17,9 +19,9 @@ Made by [Rocky Lott](https://rockylott.com).
 - **Takes you can recreate.** Saving a take keeps the audio, the exact settings, your script and the text that was actually spoken, side by side.
 - **Light and dark.** It follows your computer's setting, and the sun/moon button switches it.
 
-| Dark | Phone |
-|---|---|
-| ![Dark mode](docs/screenshot-dark.png) | ![On a phone-sized screen](docs/screenshot-phone.png) |
+| Light | Dark | Phone |
+|---|---|---|
+| ![Light mode](docs/screenshot-light.png) | ![Dark mode](docs/screenshot-dark.png) | ![On a phone-sized screen](docs/screenshot-phone.png) |
 
 ## Two engines
 
@@ -29,15 +31,15 @@ Made by [Rocky Lott](https://rockylott.com).
 
 ## Install
 
-1. On this page, press the green **Code** button, then **Download ZIP**. Unzip it somewhere you'll find it again.
-2. In the unzipped folder, double-click the start file for your computer:
+1. **[Download TTS-Studio.zip](https://github.com/twogunrock/tts-studio/releases/latest/download/TTS-Studio.zip)** and unzip it somewhere you'll find it again (on Windows: right-click it, **Extract All**).
+2. In the `TTS Studio` folder, double-click the start file for your computer:
    - **Windows:** `Start TTS Studio (Windows)`. Windows will ask whether to run a file downloaded from the internet; choose **Run**.
    - **Mac:** right-click `Start TTS Studio (macOS)` and choose **Open** (a plain double-click is blocked the first time for downloaded scripts).
    - **Linux:** run `Start TTS Studio (Linux).sh`.
 3. The first time, it sets itself up: about 300 MB and a few minutes. Then the studio opens in your browser.
 4. Press **Download the voice model** (about 350 MB, once). After that Kokoro works without the internet.
 
-Next time, double-click the same file and the studio opens straight away. There's no window to keep open: the studio runs in the background while its browser tab is open, and stops by itself a minute or two after you close the tab. If something goes wrong, `studio.log` in the folder says what happened.
+On Windows the first start also puts a **TTS Studio** shortcut on your desktop (on Linux, in your app menu); use it from then on. There's no window to keep open: the studio runs in the background while its browser tab is open, and stops by itself a few seconds after you close the tab. If something goes wrong, `studio.log` in the folder says what happened.
 
 Everything, including its own copy of Python, is installed inside the folder. Nothing else on your computer changes, and deleting the folder removes TTS Studio completely.
 
