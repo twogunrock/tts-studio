@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chatterbox Studio</title>
+<link rel="stylesheet" href="/shared/studio.css">
+</head><body>
+
+<header class="top">
+  <div>
+    <h1>Chatterbox Studio</h1>
+    <p class="tagline">Expressive narration from a script, in a voice you choose, right on this computer.</p>
+  </div>
+  <span class="spacer"></span>
+  <span class="onair" id="onair" role="status"><i></i><span id="onair-text">Ready</span></span>
+  <button class="btn plain" id="guide-open" type="button">Guide</button>
+</header>
+
+<main class="wrap">
+  <div id="banner"></div>
+
+  <div class="col">
+    <section class="step" aria-labelledby="s1">
+      <div class="step-head"><span class="num" aria-hidden="true">1</span><div>
+        <h2 id="s1">Pick a voice and a style</h2>
+        <p class="lede">Use Chatterbox's own voice, or give it a short recording to copy.</p>
+        <button class="howto" type="button" data-explain="x1">How does voice copying work?</button>
+      </div></div>
+      <div class="explain" id="x1">
+        <h3>What it does</h3>
+        <p>Give Chatterbox a short recording of someone speaking and it reads your script in a voice like theirs, picking up their tone and delivery.</p>
+        <h3>Recording a good sample</h3>
+        <ul>
+          <li>About 10 seconds of one person talking naturally.</li>
+          <li>A quiet room: no music, no background voices.</li>
+          <li>Save it as a <code>.wav</code> file in the samples folder shown below, then reload this page.</li>
+        </ul>
+        <h3>Only copy voices you have permission to use</h3>
+        <p>Your own voice, or someone who has agreed to it. Every clip Chatterbox makes carries an inaudible watermark that marks it as AI-generated.</p>
+      </div>
+
+      <div class="field">
+        <label for="ref">Voice</label>
+        <p class="hint">Samples come from <code id="refs-dir"></code></p>
+        <select id="ref"></select>
+      </div>
+
+      <div class="field">
+        <span class="label">Style</span>
+        <p class="hint">A quick starting point. Each one sets the sliders below.</p>
+        <div class="chips" id="styles"></div>
+      </div>
+
+      <div class="field">
+        <div class="field-top"><label for="exaggeration">Expressiveness</label><span class="now" id="exaggeration_now"></span></div>
+        <input type="range" id="exaggeration" min="0" max="1.5" step="0.05">
+        <div class="ends"><span>Calm</span><span>Dramatic</span></div>
+      </div>
+
+      <details class="more">
+        <summary>More controls: pacing, variety, takes and pauses</summary>
+        <div class="field">
+          <div class="field-top"><label for="cfg_weight">Pacing</label><span class="now" id="cfg_weight_now"></span></div>
+          <p class="hint">How closely Chatterbox follows its usual rhythm. Lower it for slower, more deliberate speech; that also helps when you raise expressiveness.</p>
+          <input type="range" id="cfg_weight" min="0" max="1" step="0.05">
+          <div class="ends"><span>Slow and deliberate</span><span>Brisk</span></div>
+        </div>
+        <div class="field">
+          <div class="field-top"><label for="temperature">Variety</label><span class="now" id="temperature_now"></span></div>
+          <p class="hint">How much each reading is allowed to wander. Steady is predictable; lively has more personality and more surprises.</p>
+          <input type="range" id="temperature" min="0.3" max="1.2" step="0.05">
+          <div class="ends"><span>Steady</span><span>Lively</span></div>
+        </div>
+        <div class="field">
+          <div class="field-top"><label for="seed">Take number</label></div>
+          <p class="hint">Each number is a slightly different reading of the same line. Like a take? Keep its number and the same line always comes out the same.</p>
+          <div class="actions" style="margin-top:4px"><input type="number" id="seed" style="width:120px"><button class="btn quiet" type="button" id="new-take">Try a different take</button></div>
+        </div>
+        <div class="field">
+          <div class="field-top"><label for="gap_line">Pause between lines</label><span class="now" id="gap_line_now"></span></div>
+          <input type="range" id="gap_line" min="0" max="1.5" step="0.05">
+          <div class="ends"><span>Run together</span><span>Long pause</span></div>
+        </div>
+        <div class="field">
+          <div class="field-top"><label for="gap_head">Pause after headings</label><span class="now" id="gap_head_now"></span></div>
+          <p class="hint">Short lines, like titles, get this longer pause so the listener hears a new section begin.</p>
+          <input type="range" id="gap_head" min="0" max="2" step="0.05">
+          <div class="ends"><span>Run together</span><span>Long pause</span></div>
+        </div>
+        <label class="check"><input type="checkbox" id="fixes"><span><b>Fix pronunciations</b>
+          Swaps in the spellings from <code>overrides.json</code> before speaking, for names and terms Chatterbox gets wrong.</span></label>
+      </details>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="step" aria-labelledby="s2">
+      <div class="step-head"><span class="num" aria-hidden="true">2</span><div>
+        <h2 id="s2">Write your script</h2>
+        <p class="lede">Type or paste what you want spoken. Each line becomes its own piece.</p>
+        <button class="howto" type="button" data-explain="x2">Tips for a script that sounds natural</button>
+      </div></div>
+      <div class="explain" id="x2">
+        <h3>One line, one piece</h3>
+        <p>Every line is spoken separately with a pause after it. That means you can fix one line and re-create only that line, without touching the rest.</p>
+        <h3>Punctuation steers the delivery</h3>
+        <ul>
+          <li>An exclamation mark lifts the energy. A question mark sounds like a question.</li>
+          <li>Commas and ellipses (…) slow things down.</li>
+          <li>A short line on its own reads as a heading and gets a longer pause.</li>
+        </ul>
+        <h3>A word comes out wrong?</h3>
+        <p>Spell it the way it sounds ("sequel" for SQL), or add it to <code>overrides.json</code> once and every script gets the fix.</p>
+      </div>
+      <label class="sr" for="text">Script</label>
+      <textarea class="script" id="text" spellcheck="true"></textarea>
+      <p class="script-meta" id="script-meta"></p>
+    </section>
+
+    <section class="step" aria-labelledby="s3">
+      <div class="step-head"><span class="num" aria-hidden="true">3</span><div>
+        <h2 id="s3">Listen and save</h2>
+        <p class="lede">Create the audio, listen, adjust, and save the take you like.</p>
+        <button class="howto" type="button" data-explain="x3">What do these buttons do?</button>
+      </div></div>
+      <div class="explain" id="x3">
+        <h3>Create audio</h3>
+        <p>Speaks the whole script. It takes about as long as the audio itself. To redo part of it, select those lines in the script and use <b>Create audio for selected lines</b>.</p>
+        <h3>Save this take</h3>
+        <p>Saves the audio as a WAV file, together with the exact settings and text that made it, in a folder named after your take. You can always recreate it later.</p>
+        <h3>Remember these settings</h3>
+        <p>Keeps your voice, style and pacing for next time, so the studio opens the way you left it.</p>
+      </div>
+      <div class="actions">
+        <button class="btn" type="button" id="create">Create audio</button>
+        <button class="btn quiet" type="button" id="create-sel">Create audio for selected lines</button>
+      </div>
+      <p class="status" id="status" aria-live="polite"></p>
+      <audio id="audio" controls></audio>
+      <div class="actions">
+        <label class="sr" for="xname">Name for this take</label>
+        <input type="text" id="xname" placeholder="Name this take, e.g. welcome message v2" style="flex:1;min-width:200px">
+        <button class="btn" type="button" id="save" disabled>Save this take</button>
+      </div>
+      <div class="actions"><button class="btn plain" type="button" id="remember">Remember these settings</button></div>
+    </section>
+
+    <section class="step" aria-labelledby="s4">
+      <h2 id="s4">What Chatterbox read</h2>
+      <p class="lede">Your script after pronunciation fixes, one numbered piece per line. If something sounds off, check here first.</p>
+      <p class="empty" id="read-empty">Create audio and the text Chatterbox spoke will appear here.</p>
+      <ol class="read" id="read" hidden></ol>
+    </section>
+  </div>
+</main>
+
+<dialog class="guide" id="guide" aria-labelledby="g-title">
+  <div class="guide-body">
+    <h2 id="g-title">Welcome to Chatterbox Studio</h2>
+    <p>Chatterbox is a free, open-source voice model from Resemble AI. It runs on this computer, so nothing you type leaves your machine. It works best with an NVIDIA graphics card; without one it still runs, just slowly.</p>
+    <h3>Your first recording, in four steps</h3>
+    <ol>
+      <li><b>Pick a voice and a style</b> in step 1. Chatterbox's own voice and the Natural style are a good start.</li>
+      <li><b>Paste your script</b> in step 2, one sentence or idea per line.</li>
+      <li><b>Create audio</b> and listen. The very first time, the studio downloads the model (a few gigabytes), so give it a few minutes.</li>
+      <li>Happy with it? Name it and <b>Save this take</b>.</li>
+    </ol>
+    <h3>Making it sound better</h3>
+    <ul>
+      <li>Too flat? Raise <b>Expressiveness</b>. Too theatrical? Lower it.</li>
+      <li>A line came out odd? Select it and create it again with <b>Try a different take</b>.</li>
+      <li>Want your own voice? Record about 10 seconds of yourself and add it as a sample.</li>
+    </ul>
+    <h3>Where your files go</h3>
+    <p>Saved takes go in the <code>exports</code> folder next to the studio. Each take has the audio, the settings, your script and the text Chatterbox spoke.</p>
+    <h3>Using the audio</h3>
+    <p>Chatterbox is released under the MIT license, which allows commercial use. Its audio carries an inaudible watermark marking it as AI-generated. Only copy voices you have permission to use.</p>
+  </div>
+  <div class="guide-foot"><button class="btn" type="button" id="guide-close">Got it</button></div>
+</dialog>
+
+<script>
+const STUDIO_KEY = 'chatterbox-studio';
+const REFS = __REFS__, REFS_DIR = __REFS_DIR__, STATUS = __STATUS__, PRESET = __PRESET__, SAMPLE = __TEXT__;
+const FIRST_LOAD_TEXT = 'Loading the voice model, then creating audio. The very first time, this includes a download of a few gigabytes.';
+</script>
+<script src="/shared/studio.js"></script>
+<script>
+const BUILTIN = '(built-in voice)';
+/* Starting points. Expressive follows the Chatterbox authors' tip: more exaggeration, lower CFG. */
+const STYLES = [
+  {name:'Steady narrator', exaggeration:0.4, cfg_weight:0.5, temperature:0.7},
+  {name:'Natural', exaggeration:0.5, cfg_weight:0.5, temperature:0.8},
+  {name:'Expressive', exaggeration:0.7, cfg_weight:0.3, temperature:0.8},
+];
+const KNOBS = ['exaggeration', 'cfg_weight', 'temperature'];
+
+function banner(){
+  let h = '';
+  if (STATUS.preview) h = '<b>Preview mode.</b> No voice model is loaded, so Create audio plays a short tone for each line instead of speech. Everything else works: try the controls, and check the pacing and the text.';
+  else if (!STATUS.installed) h = '<b>Chatterbox isn\'t installed yet.</b> In the same Python that runs this studio, run <code>pip install chatterbox-tts</code>, then restart the studio.';
+  else if (STATUS.watermark === false) h = '<b>Watermark is off.</b> The watermarking library didn\'t load on this version of Python, so these clips are not marked as AI-generated. Python 3.11 or 3.12 fixes it.';
+  $('banner').innerHTML = h ? `<div class="note">${h}</div>` : '';
+}
+function afterRender(r){ const wm = r.headers.get('X-Watermark'); if (wm) { STATUS.watermark = wm === 'on'; banner(); } }
+
+function markStyle(){
+  [...$('styles').children].forEach((b, i) => b.setAttribute('aria-pressed',
+    String(KNOBS.every(k => Math.abs(+$(k).value - STYLES[i][k]) < 0.001))));
+}
+STYLES.forEach(s => {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = s.name;
+  b.addEventListener('click', () => { KNOBS.forEach(k => { $(k).value = s[k]; $(k).dispatchEvent(new Event('input')); }); });
+  $('styles').appendChild(b);
+});
+
+function settings(){
+  return {ref: $('ref').value, exaggeration: +$('exaggeration').value, cfg_weight: +$('cfg_weight').value,
+    temperature: +$('temperature').value, seed: +$('seed').value, gap_line: +$('gap_line').value,
+    gap_head: +$('gap_head').value, fixes: $('fixes').checked};
+}
+
+banner();
+$('refs-dir').textContent = REFS_DIR;
+$('ref').innerHTML = REFS.map(r => `<option value="${esc(r)}"${r === PRESET.ref ? ' selected' : ''}>${esc(r === BUILTIN ? "Chatterbox's own voice" : 'Copy: ' + r.replace(/\.wav$/i, ''))}</option>`).join('');
+slider('exaggeration', PRESET.exaggeration, v => v.toFixed(2) + ', ' + band(v, 0.35, 0.75, 'calm', 'natural', 'dramatic'));
+slider('cfg_weight', PRESET.cfg_weight, v => v.toFixed(2) + ', ' + band(v, 0.35, 0.65, 'slower', 'normal', 'brisk'));
+slider('temperature', PRESET.temperature, v => v.toFixed(2) + ', ' + band(v, 0.65, 0.95, 'steady', 'balanced', 'lively'));
+slider('gap_line', PRESET.gap_line, secs);
+slider('gap_head', PRESET.gap_head, secs);
+KNOBS.forEach(k => $(k).addEventListener('input', markStyle)); markStyle();
+$('seed').value = PRESET.seed;
+$('new-take').addEventListener('click', () => { $('seed').value = Math.floor(Math.random() * 99999); setStatus('New take number set. Create audio to hear it.'); });
+$('fixes').checked = PRESET.fixes;
+$('text').value = SAMPLE; countLines();
+</script>
+</body></html>

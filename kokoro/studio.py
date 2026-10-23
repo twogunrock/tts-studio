@@ -131,78 +131,8 @@ def synth(p, text):
     return buf.getvalue(), spoken
 
 
-PAGE = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kokoro Studio</title>
-<style>
-:root{--bg:#f6f7f9;--fg:#1d2330;--card:#fff;--line:#d8dde5;--acc:#2f6fdf;--mut:#667085;--warn-bg:#fff4e0;--warn:#8a5300}
-@media (prefers-color-scheme:dark){:root{--bg:#14171c;--fg:#e6e9ef;--card:#1d2128;--line:#343a45;--acc:#6ea0ff;--mut:#98a2b3;--warn-bg:#3a2c12;--warn:#f0c070}}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,Segoe UI,sans-serif}
-main{max-width:980px;margin:0 auto;padding:20px 16px}
-h1{font-size:20px;margin:0 0 14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:14px}
-.banner{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 14px;margin-bottom:14px}
-.row{display:flex;gap:10px;align-items:center;margin:6px 0;flex-wrap:wrap}
-label{color:var(--mut);min-width:110px}
-select,input[type=number],input[type=text]{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:4px 6px}
-input[type=range]{flex:1;min-width:160px}
-textarea{width:100%;box-sizing:border-box;min-height:220px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;font:14px/1.45 ui-monospace,Consolas,monospace}
-button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer}
-button.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)} button:disabled{opacity:.4;cursor:default}
-.val{min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
-.hint{color:var(--mut);font-size:13px}
-#status{color:var(--mut)} audio{width:100%;margin-top:8px}
-#spoken{white-space:pre-wrap;font:13px/1.5 ui-monospace,Consolas,monospace;color:var(--mut);max-height:260px;overflow:auto}
-code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px}
-</style></head><body><main>
-<h1>Kokoro Studio</h1>
-<div id="banner"></div>
-<div class="card"><b>Voice blend</b> <span id="wsum" class="hint"></span>
-<div id="voices"></div>
-<div class="row"><button class="alt" onclick="addVoice()">+ voice</button></div></div>
-<div class="card"><b>Delivery</b>
-<div class="row"><label>Speed</label><input type="range" id="speed" min="0.7" max="1.3" step="0.01"><span class="val" id="speed_v"></span></div>
-<div class="row"><label>Pause after line</label><input type="range" id="gap_line" min="0" max="1.5" step="0.05"><span class="val" id="gap_line_v"></span></div>
-<div class="row"><label>Pause after heading</label><input type="range" id="gap_head" min="0" max="2" step="0.05"><span class="val" id="gap_head_v"></span></div>
-<div class="row"><label>Punctuation fixes</label><input type="checkbox" id="clean"><span class="hint">commas around quotes, dashes to pauses, list items to colons, plus your word swaps in overrides.json</span></div></div>
-<div class="card"><b>Text</b> <span class="hint">one line = one spoken piece; edit freely</span>
-<textarea id="text"></textarea>
-<div class="row"><button onclick="go(false)">Render all</button><button class="alt" onclick="go(true)">Render selection</button>
-<button class="alt" onclick="save()">Save preset</button><span id="status"></span></div>
-<div class="row"><input type="text" id="xname" placeholder="name for this export" style="flex:1;min-width:200px">
-<button id="xbtn" onclick="exp()" disabled>Export last render</button></div>
-<audio id="audio" controls></audio></div>
-<div class="card"><b>What Kokoro actually read</b><div id="spoken"></div></div>
-</main><script>
-const VOICES=__VOICES__, S=__STATUS__; let P=__PRESET__, LAST=null;
-const $=id=>document.getElementById(id);
-const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-if(S.preview) $('banner').innerHTML='<div class="banner"><b>Preview mode.</b> No model is loaded: Render plays a test tone per line so you can check pacing, and the panel at the bottom shows the real cleaned-up text.</div>';
-else if(S.missing.length) $('banner').innerHTML='<div class="banner"><b>Model files not found</b> in <code>'+esc(S.model_dir)+'</code>: '+S.missing.map(esc).join(', ')+'. Download them into that folder, or change <code>model_dir</code> in config.json.</div>';
-function voiceRow(v,w){const d=document.createElement('div');d.className='row';
- d.innerHTML='<select>'+VOICES.map(x=>`<option${x==v?' selected':''}>${x}</option>`).join('')+'</select>'+
- `<input type="range" min="0" max="1" step="0.05" value="${w}"><span class="val">${w}</span><button class="alt" title="remove">×</button>`;
- const r=d.querySelector('input[type=range]'),s=d.querySelector('.val');
- r.oninput=()=>{s.textContent=r.value;sum()}; d.querySelector('button').onclick=()=>{d.remove();sum()};
- $('voices').appendChild(d)}
-function addVoice(){voiceRow(VOICES[0],0.25);sum()}
-function sum(){const t=[...$('voices').querySelectorAll('input[type=range]')].reduce((a,r)=>a+ +r.value,0);
- $('wsum').textContent='(weights total '+t.toFixed(2)+', normalised when rendering)'}
-function bind(id){const r=$(id),s=$(id+'_v');r.value=P[id];s.textContent=P[id];r.oninput=()=>s.textContent=r.value}
-function read(){return{voices:[...$('voices').children].map(d=>[d.querySelector('select').value,+d.querySelector('input').value]),
- speed:+$('speed').value,gap_line:+$('gap_line').value,gap_head:+$('gap_head').value,clean:$('clean').checked}}
-async function go(sel){const ta=$('text');let t=ta.value;if(sel){t=ta.value.substring(ta.selectionStart,ta.selectionEnd);if(!t.trim()){$('status').textContent='select some text first';return}}
- $('status').textContent=S.loaded||S.preview?'rendering…':'loading the model, then rendering…';const t0=Date.now();
- const r=await fetch('/render',{method:'POST',body:JSON.stringify({preset:read(),text:t})});
- if(!r.ok){$('status').textContent='error: '+await r.text();return}
- S.loaded=true;$('spoken').textContent=decodeURIComponent(r.headers.get('X-Spoken')||'');
- LAST=r.headers.get('X-Render-Id');$('xbtn').disabled=false;
- const b=await r.blob();$('audio').src=URL.createObjectURL(b);$('audio').play().catch(()=>{});
- $('status').textContent='done in '+((Date.now()-t0)/1000).toFixed(1)+'s'}
-async function exp(){if(!LAST)return;const r=await fetch('/export',{method:'POST',body:JSON.stringify({id:LAST,name:$('xname').value})});
- $('status').textContent=await r.text()}
-async function save(){const r=await fetch('/preset',{method:'POST',body:JSON.stringify(read())});$('status').textContent=await r.text()}
-P.voices.forEach(([v,w])=>voiceRow(v,w));sum();['speed','gap_line','gap_head'].forEach(bind);$('clean').checked=P.clean;
-$('text').value=__TEXT__;
-</script></body></html>"""
+PAGE_FILE = os.path.join(HERE, "page.html")
+SHARED = os.path.join(os.path.dirname(HERE), "shared")
 
 
 class H(BaseHTTPRequestHandler):
@@ -218,8 +148,12 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body if isinstance(body, bytes) else body.encode("utf-8"))
 
     def do_GET(self):
+        if self.path in ("/shared/studio.css", "/shared/studio.js"):
+            ctype = "text/css" if self.path.endswith(".css") else "text/javascript"
+            return self._send(200, open(os.path.join(SHARED, self.path.rsplit("/", 1)[1]), "rb").read(), ctype + "; charset=utf-8")
         if self.path != "/":
             return self._send(404, "not found")
+        PAGE = open(PAGE_FILE, encoding="utf-8").read()  # read per request, so page edits show on reload
         page = (PAGE.replace("__VOICES__", json.dumps(voice_names())).replace("__STATUS__", json.dumps(model_status()))
                 .replace("__PRESET__", json.dumps(preset())).replace("__TEXT__", json.dumps(SAMPLE)))
         self._send(200, page, "text/html; charset=utf-8")
@@ -240,7 +174,7 @@ class H(BaseHTTPRequestHandler):
             if self.path == "/export":
                 rid = data.get("id", "")
                 if rid not in RENDERS:
-                    return self._send(400, "nothing to export: render something first")
+                    return self._send(400, "Create audio first, then save the take.")
                 wav, p, text, spoken = RENDERS[rid]
                 name = re.sub(r"[^\w\-]+", "_", data.get("name", "").strip())[:60] or "untitled"
                 d = os.path.join(config()["exports_dir"], f"{rid}_{name}")
@@ -250,7 +184,7 @@ class H(BaseHTTPRequestHandler):
                           open(os.path.join(d, "settings.json"), "w", encoding="utf-8"), indent=2)
                 open(os.path.join(d, "input.txt"), "w", encoding="utf-8", newline="\n").write(text)
                 open(os.path.join(d, "spoken.txt"), "w", encoding="utf-8", newline="\n").write("\n".join(spoken) + "\n")
-                return self._send(200, f"exported -> {d}")
+                return self._send(200, f"Saved. Your take is in {d}")
             if self.path == "/preset":
                 json.dump(data, open(PRESET, "w", encoding="utf-8"), indent=2)
                 return self._send(200, f"saved {time.strftime('%H:%M:%S')} -> preset.json")
