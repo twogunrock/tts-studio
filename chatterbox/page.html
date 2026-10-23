@@ -197,7 +197,7 @@ function banner(){
   let h = '';
   if (STATUS.preview) h = '<b>Preview mode.</b> No voice model is loaded, so Create audio plays a short tone for each line instead of speech. Everything else works: try the controls, and check the pacing and the text.';
   else if (!STATUS.installed) h = '<b>Chatterbox isn\'t installed yet.</b> In the same Python that runs this studio, run <code>pip install chatterbox-tts</code>, then restart the studio.';
-  else if (STATUS.watermark === false) h = '<b>Watermark is off.</b> The watermarking library didn\'t load on this version of Python, so these clips are not marked as AI-generated. Python 3.11 or 3.12 fixes it.';
+  else if (STATUS.watermark === false) h = '<b>Watermark is off.</b> The watermarking library didn\'t load, so these clips are not marked as AI-generated. The usual cause is a missing package: in the Python that runs Chatterbox, run <code>pip install "setuptools&lt;81"</code>, then restart the studio.';
   $('banner').innerHTML = h ? `<div class="note">${h}</div>` : '';
 }
 function afterRender(r){ const wm = r.headers.get('X-Watermark'); if (wm) { STATUS.watermark = wm === 'on'; banner(); } }

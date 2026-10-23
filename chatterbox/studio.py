@@ -69,7 +69,7 @@ def load():
             os.environ["HF_HOME"] = c["hf_home"]  # where the ~3 GB model download is cached
             import torch, perth
             WATERMARK = perth.PerthImplicitWatermarker is not None
-            if not WATERMARK:  # its backend doesn't load on every Python version; output is then unwatermarked
+            if not WATERMARK:  # its backend needs pkg_resources (setuptools < 81); without it, output is unwatermarked
                 perth.PerthImplicitWatermarker = perth.DummyWatermarker
             from chatterbox.tts import ChatterboxTTS
             dev = c["device"]
