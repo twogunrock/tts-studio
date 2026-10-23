@@ -467,9 +467,23 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    mode = "preview mode, no voice model" if PREVIEW else "voice models load on first use"
-    print(f"TTS Studio on http://127.0.0.1:{PORT}  ({mode}; Ctrl+C to stop)", flush=True)
+    url = f"http://127.0.0.1:{PORT}"
     try:
-        ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
+        # On Windows SO_REUSEADDR lets a second copy bind the same port silently, so it's off there.
+        server = type("Server", (ThreadingHTTPServer,), {"allow_reuse_address": os.name != "nt"})(("127.0.0.1", PORT), H)
+    except OSError:  # already running (a second double-click): just show it
+        print(f"TTS Studio is already running. Opening {url}", flush=True)
+        if "--open" in sys.argv:
+            import webbrowser; webbrowser.open(url)
+        sys.exit(3)  # the start scripts read 3 as "already running", not "stopped"
+    mode = "preview mode, no voice model" if PREVIEW else "voice models load on first use"
+    print(f"TTS Studio is running at {url}  ({mode})\nLeave this window open while you use it. Close it to stop the studio.",
+          flush=True)
+    if "--open" in sys.argv:  # the setup scripts pass this, so a double-click ends in the browser
+        import webbrowser; threading.Timer(0.5, webbrowser.open, [url]).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
     finally:
         Chatterbox.stop()
