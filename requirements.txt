@@ -1,0 +1,5 @@
+# The versions TTS Studio was tested with (Python 3.12). Pinned on purpose: change one only after testing it.
+kokoro-onnx==0.6.1
+soundfile==0.14.0
+onnxruntime==1.31.0
+numpy==2.5.4
