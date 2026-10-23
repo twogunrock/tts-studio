@@ -27,24 +27,19 @@ It's built for people who need a voice-over and don't want to learn audio softwa
 
 ## Install
 
-> One-click setup scripts for Windows, macOS and Linux are coming. Until then, you need Python 3.12.
+1. On this page, press the green **Code** button, then **Download ZIP**. Unzip it somewhere you'll find it again.
+2. In the unzipped folder, double-click the start file for your computer:
+   - **Windows:** `Start TTS Studio (Windows)`. Windows will ask whether to run a file downloaded from the internet; choose **Run**.
+   - **Mac:** right-click `Start TTS Studio (macOS)` and choose **Open** (a plain double-click is blocked the first time for downloaded scripts).
+   - **Linux:** run `Start TTS Studio (Linux).sh`.
+3. The first time, it sets itself up: about 300 MB and a few minutes. Then the studio opens in your browser.
+4. Press **Download the voice model** (about 350 MB, once). After that Kokoro works without the internet.
 
-```
-git clone https://github.com/twogunrock/tts-studio.git
-cd tts-studio
-python -m venv .venv
-```
+Next time, double-click the same file and the studio opens straight away. Leave its window open while you use the studio; close it to stop.
 
-Activate the environment. On Windows: `.venv\Scripts\activate`. On macOS or Linux: `source .venv/bin/activate`. Then:
+Everything, including its own copy of Python, is installed inside the folder. Nothing else on your computer changes, and deleting the folder removes TTS Studio completely.
 
-```
-pip install -r requirements.txt
-python app.py
-```
-
-Open **http://127.0.0.1:7870** in your browser. The first time, press **Download the voice model** (about 350 MB, once). After that Kokoro works without the internet.
-
-Want to look around before downloading anything? `python app.py --preview` opens the studio with no voice model. Create audio plays a short tone per line, so you can still try the controls and the pacing.
+**Comfortable with Python?** You can skip the start file: with Python 3.12, run `pip install -r requirements.txt`, then `python app.py`, and open http://127.0.0.1:7870. Add `--preview` to look around without a voice model (Create audio plays a short tone per line).
 
 ## Where things are kept
 
