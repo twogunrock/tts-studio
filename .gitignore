@@ -1,0 +1,11 @@
+# Models, downloads and per-user state never go in the repo
+*/models/
+*/hf/
+*/refs/
+*/exports/
+*/config.json
+*/preset.json
+*/overrides.json
+__pycache__/
+venv/
+.venv/
