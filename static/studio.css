@@ -146,3 +146,15 @@ h3.sub{font:650 16px var(--f-head);margin:18px 0 6px}
 .folders button:hover{background:var(--accent-soft)}
 .folders li.hint,.folders li.bad{padding:10px 12px}
 .tag{display:inline-block;margin-left:8px;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 8px}
+
+/* Pronunciations */
+.pron-head,.pron-row{display:grid;grid-template-columns:1fr 1fr 92px 64px;gap:8px;align-items:center}
+.pron-head{margin-top:16px;color:var(--ink-2);font-size:13px;font-weight:600}
+.pron-row{margin-top:8px}
+.pron-row input{min-width:0;width:100%}
+.pron-row .hear{padding:8px 12px;min-height:40px}
+.pron-row .remove{background:none;border:0;color:var(--ink-2);cursor:pointer;font-size:14px;text-decoration:underline}
+@media (max-width:520px){
+  .pron-head{display:none}
+  .pron-row{grid-template-columns:1fr 1fr;padding-top:10px;border-top:1px dashed var(--line)}
+}

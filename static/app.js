@@ -228,7 +228,8 @@ async function create(selectionOnly){
     $('read').hidden = false; $('read-empty').hidden = true;
     LAST = r.headers.get('X-Render-Id'); $('save').disabled = false;
     const b = await r.blob(); $('audio').src = URL.createObjectURL(b); $('audio').play().catch(() => {});
-    setStatus(`${name} audio ready in ${((Date.now() - t0) / 1000).toFixed(1)} seconds. Press play to hear it again.`, 'ok');
+    const warn = r.headers.get('X-Warning');
+    setStatus(warn ? decodeURIComponent(warn) : `${name} audio ready in ${((Date.now() - t0) / 1000).toFixed(1)} seconds. Press play to hear it again.`, warn ? 'bad' : 'ok');
   } catch (e) {
     setStatus('The studio stopped responding. Check the window it is running in, then reload this page.', 'bad');
   } finally { onAir(false); refreshCreate(); }
@@ -246,6 +247,66 @@ $('remember').addEventListener('click', async () => {
 });
 $('text').addEventListener('input', countLines);
 
+/* ── pronunciations: saved to overrides.json as you type ───────────────────── */
+let pronTimer = null, pronBroken = false;
+function pronStatus(text, kind){ const s = $('pron-status'); s.textContent = text; s.className = 'status' + (kind ? ' ' + kind : ''); }
+function pronRows(){ return [...$('pron-rows').children].map(r => [r.querySelector('.p-word').value, r.querySelector('.p-say').value]); }
+function pronEmpty(){ $('pron-empty').hidden = $('pron-rows').children.length > 0; }
+function pronRow(word, say){
+  const d = document.createElement('div'); d.className = 'pron-row';
+  d.innerHTML = `<input class="p-word" type="text" aria-label="Written as" placeholder="e.g. SQL" spellcheck="false">
+    <input class="p-say" type="text" aria-label="Say it as" placeholder="e.g. sequel" spellcheck="false">
+    <button class="btn plain hear" type="button">Hear it</button><button class="remove" type="button">Remove</button>`;
+  d.querySelector('.p-word').value = word; d.querySelector('.p-say').value = say;
+  d.querySelectorAll('input').forEach(i => i.addEventListener('input', queuePronSave));
+  d.querySelector('.remove').addEventListener('click', () => { d.remove(); pronEmpty(); queuePronSave(); });
+  d.querySelector('.hear').addEventListener('click', () => hear(d));
+  $('pron-rows').appendChild(d); pronEmpty();
+  return d;
+}
+function queuePronSave(){
+  if (pronBroken) return;
+  clearTimeout(pronTimer); pronStatus('Saving…');
+  pronTimer = setTimeout(savePron, 700);
+}
+async function savePron(){
+  const r = await api('/api/pronunciations', {words: pronRows()});
+  if (!r.ok) { pronStatus(await r.text(), 'bad'); return; }
+  const half = pronRows().filter(([w, s]) => !!w.trim() !== !!s.trim()).length;
+  pronStatus(half ? 'Saved. Rows missing either side are skipped until both are filled in.' : 'Saved.', 'ok');
+}
+async function hear(row){
+  const word = row.querySelector('.p-word').value.trim(), say = row.querySelector('.p-say').value.trim();
+  if (!word && !say) { pronStatus('Type a word first, then press Hear it.', 'bad'); return; }
+  if (!engineReady()) { pronStatus(ENGINE === 'kokoro' ? 'Download the voice model in step 1 first.' : 'Finish setting up Chatterbox first, or switch to Kokoro.', 'bad'); return; }
+  const btn = row.querySelector('.hear'); btn.disabled = true; pronStatus(`Speaking "${say || word}"…`);
+  try {
+    const r = await api('/api/render', {engine: ENGINE, preset: {...settings(), fixes: false}, text: say || word});
+    if (!r.ok) { pronStatus(await r.text(), 'bad'); return; }
+    if (ENGINE === 'kokoro') { STATE.kokoro.loaded = true; STATE.chatterbox.running = false; }
+    else { STATE.chatterbox.running = true; STATE.kokoro.loaded = false; }
+    new Audio(URL.createObjectURL(await r.blob())).play().catch(() => {});
+    pronStatus('');
+  } finally { btn.disabled = false; }
+}
+$('pron-add').addEventListener('click', () => pronRow('', '').querySelector('.p-word').focus());
+$('pron-from-sel').addEventListener('click', () => {
+  const ta = $('text'), sel = ta.value.substring(ta.selectionStart, ta.selectionEnd).trim();
+  if (!sel) { pronStatus('Select a word in the script first, then press this button.', 'bad'); return; }
+  if (sel.includes('\n')) { pronStatus('Select a word or short phrase on one line.', 'bad'); return; }
+  const have = [...$('pron-rows').children].find(r => r.querySelector('.p-word').value === sel);
+  (have || pronRow(sel, '')).querySelector('.p-say').focus();
+  pronStatus(have ? `"${sel}" is already in the list. Change how it should sound here.` : `Now type how "${sel}" should sound.`);
+});
+async function loadPron(){
+  const p = await (await fetch('/api/pronunciations')).json();
+  pronBroken = !!p.problem;
+  $('pron-problem').innerHTML = p.problem ? `<div class="note">${esc(p.problem)} Editing is paused until it's fixed, so nothing in the file gets lost. Reload this page after fixing it.</div>` : '';
+  $('pron-rows').innerHTML = ''; p.words.forEach(([w, s]) => pronRow(w, s)); pronEmpty();
+  $('pron-add').disabled = $('pron-from-sel').disabled = pronBroken;
+  if (p.lines) pronStatus(`Plus ${p.lines} whole-line replacement${p.lines === 1 ? '' : 's'} set directly in overrides.json.`);
+}
+
 /* ── start-up ──────────────────────────────────────────────────────────────── */
 const K = PRESETS.kokoro, C = PRESETS.chatterbox;
 K.voices.forEach(([v, w]) => voiceRow(v, w)); drawBlend();
@@ -261,6 +322,6 @@ slider('c_gap_line', C.gap_line, secs); slider('c_gap_head', C.gap_head, secs);
 KNOBS.forEach(k => $('c_' + k).addEventListener('input', markStyle)); markStyle();
 $('c_seed').value = C.seed; $('c_fixes').checked = C.fixes;
 $('text').value = SAMPLE; countLines();
-showChatterbox(); showDownload();
+showChatterbox(); showDownload(); loadPron();
 if (STATE.kokoro.download.running) pollDownload();
 showEngine(store.get('engine') === 'chatterbox' ? 'chatterbox' : 'kokoro');

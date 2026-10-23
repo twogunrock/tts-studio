@@ -79,7 +79,7 @@
           <div class="ends"><span>Run together</span><span>Long pause</span></div>
         </div>
         <label class="check"><input type="checkbox" id="k_fixes"><span><b>Smooth out punctuation and fix pronunciations</b>
-          Kokoro breathes at commas but not at dashes or quotes, so this adds the pauses a person would take. It also applies your word swaps from <code>overrides.json</code>.</span></label>
+          Kokoro breathes at commas but not at dashes or quotes, so this adds the pauses a person would take. It also applies your Pronunciations list.</span></label>
       </details>
     </section>
 
@@ -179,7 +179,7 @@
             <div class="ends"><span>Run together</span><span>Long pause</span></div>
           </div>
           <label class="check"><input type="checkbox" id="c_fixes"><span><b>Fix pronunciations</b>
-            Applies your word swaps from <code>overrides.json</code> before speaking, for names and terms Chatterbox gets wrong.</span></label>
+            Applies your Pronunciations list before speaking, for names and terms Chatterbox gets wrong.</span></label>
           <p class="hint" style="margin-top:18px">Using the Chatterbox in <code id="cb-using"></code>. <button class="linkish" type="button" id="cb-forget">Use a different install</button></p>
         </details>
       </div>
@@ -204,11 +204,40 @@
           <li>Capital letters don't add emphasis. Rewording does.</li>
         </ul>
         <h3>A word comes out wrong?</h3>
-        <p>Spell it the way it sounds ("sequel" for SQL), or add it to <code>overrides.json</code> once and every script gets the fix.</p>
+        <p>Add it to <b>Pronunciations</b> below once, and every script gets the fix. Select the word in the script first and the studio fills it in for you.</p>
       </div>
       <label class="sr" for="text">Script</label>
       <textarea class="script" id="text" spellcheck="true"></textarea>
       <p class="script-meta" id="script-meta"></p>
+    </section>
+
+    <section class="step" aria-labelledby="sp">
+      <div class="step-head"><div>
+        <h2 id="sp">Pronunciations</h2>
+        <p class="lede">Words the voice gets wrong, and how they should sound. Both engines use this list.</p>
+        <button class="howto" type="button" data-explain="xp">How do pronunciations work?</button>
+      </div></div>
+      <div class="explain" id="xp">
+        <h3>What happens</h3>
+        <p>Before anything is spoken, every place a word appears exactly as you typed it here is swapped for how it should sound. Capitals matter: "SQL" won't change "sql".</p>
+        <h3>Writing how it sounds</h3>
+        <ul>
+          <li>Spell it the way you'd say it: SQL as "sequel", GUI as "gooey".</li>
+          <li>For letters said one at a time, separate them: MCS as "M C S", or "em cee ess" if the voice runs them together.</li>
+          <li>Use <b>Hear it</b> to try a spelling before you use it in a script.</li>
+        </ul>
+        <h3>Where it's kept</h3>
+        <p>In <code>overrides.json</code> next to the studio, saved as you type. It's used whenever the pronunciation option under <b>More controls</b> in step 1 is on, which it is by default.</p>
+      </div>
+      <div id="pron-problem"></div>
+      <div class="pron-head" aria-hidden="true"><span>Written as</span><span>Say it as</span></div>
+      <div id="pron-rows"></div>
+      <p class="empty" id="pron-empty">No pronunciations yet. Add one when a word comes out wrong.</p>
+      <div class="actions">
+        <button class="btn quiet" type="button" id="pron-add">Add a word</button>
+        <button class="btn quiet" type="button" id="pron-from-sel">Fix the word selected in the script</button>
+      </div>
+      <p class="status" id="pron-status" aria-live="polite"></p>
     </section>
 
     <section class="step" aria-labelledby="s3">

@@ -20,17 +20,36 @@ def clean(ln):
     return re.sub(r",\s*,", ",", ln)
 
 
-def apply_overrides(lines, path):
-    """overrides.json: exact line replacements first, then whole-word swaps. Returns a new list of lines."""
+def load_overrides(path):
+    """Returns (overrides dict, problem). A missing file is fine; a broken one is reported in plain words."""
     try:
         ov = json.load(open(path, encoding="utf-8"))
-    except (OSError, ValueError):
-        return lines
+    except FileNotFoundError:
+        return {}, ""
+    except ValueError as e:
+        where = f" (line {e.lineno}, column {e.colno})" if hasattr(e, "lineno") else ""
+        return {}, (f"The pronunciations file can't be read{where}, so no word swaps were applied. Fix it in a text "
+                    f"editor, or delete it and add your words again in the studio.")
+    except OSError:
+        return {}, "The pronunciations file can't be opened, so no word swaps were applied."
+    if not isinstance(ov, dict):
+        return {}, "The pronunciations file isn't in the expected format, so no word swaps were applied."
+    return ov, ""
+
+
+def swap_word(ln, word, say):
+    """Whole-word swap. Lookarounds instead of a word boundary, so words that start or end with a symbol (C++, .NET) work."""
+    return re.sub(rf"(?<!\w){re.escape(word)}(?!\w)", lambda m: say, ln)
+
+
+def apply_overrides(lines, ov):
+    """Exact line replacements first, then whole-word swaps. Returns a new list of lines."""
     out = []
     for ln in lines:
         ln = ov.get("lines", {}).get(ln, ln)
         for w, say in ov.get("words", {}).items():
-            ln = re.sub(rf"\b{re.escape(w)}\b", say, ln)
+            if w:
+                ln = swap_word(ln, w, say)
         out += ln.split("\n")
     return out
 

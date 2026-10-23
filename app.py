@@ -252,15 +252,17 @@ def is_head(ln):
 
 
 def prepare(engine, p, text):
-    """Returns (spoken lines, pause after each). Kokoro gets the punctuation rules; both get the word swaps."""
+    """Returns (spoken lines, pause after each, warning). Kokoro gets the punctuation rules; both get the word swaps."""
     lines = [l.strip() for l in text.split("\n") if l.strip()]
+    warning = ""
     if p["fixes"]:
-        lines = tr.apply_overrides(lines, config()["overrides"])
+        ov, warning = tr.load_overrides(config()["overrides"])
+        lines = tr.apply_overrides(lines, ov)
         if engine == "kokoro":
             lines = tr.split_long(tr.join_labels(lines))
     spoken = [tr.clean(l) for l in lines] if engine == "kokoro" and p["fixes"] else lines
     gaps = [float(p["gap_head"] if is_head(l) else p["gap_line"]) for l in lines]
-    return spoken, gaps
+    return spoken, gaps, warning
 
 
 def tone_wav(spoken, gaps, sr=24000):
@@ -278,21 +280,49 @@ def tone_wav(spoken, gaps, sr=24000):
 
 
 def render(engine, p, text):
-    spoken, gaps = prepare(engine, p, text)
+    """Returns (wav bytes, spoken lines, warning)."""
+    spoken, gaps, warning = prepare(engine, p, text)
     if not spoken:
         raise ValueError("The script is empty. Type or paste what you want spoken.")
     if PREVIEW:
-        return tone_wav(spoken, gaps), spoken
+        return tone_wav(spoken, gaps), spoken, warning
     with RENDER_LOCK:
         if engine == "kokoro":
             if Kokoro.missing():
                 raise ValueError("The Kokoro voice model isn't downloaded yet. Use the download button in step 1.")
             Chatterbox.stop()  # one model in memory at a time
-            return Kokoro.synth(p, spoken, gaps), spoken
+            return Kokoro.synth(p, spoken, gaps), spoken, warning
         if not config()["chatterbox_python"]:
             raise ValueError("Chatterbox isn't set up yet. Follow the steps on the Chatterbox tab first.")
         Kokoro.unload()
-        return Chatterbox.synth(p, spoken, gaps), spoken
+        return Chatterbox.synth(p, spoken, gaps), spoken, warning
+
+
+# ── pronunciations (overrides.json): the page edits "words"; "lines" stays a file-only power feature ─────────
+def pronunciations():
+    ov, problem = tr.load_overrides(config()["overrides"])
+    words = ov.get("words") if isinstance(ov.get("words"), dict) else {}
+    return {"words": [[w, s] for w, s in words.items()], "lines": len(ov.get("lines") or {}), "problem": problem}
+
+
+def save_pronunciations(rows):
+    path = config()["overrides"]
+    ov, problem = tr.load_overrides(path)
+    if problem:  # never overwrite a file we couldn't read: it may hold line replacements the page can't see
+        raise ValueError(problem + " Your changes weren't saved, so nothing in the file is lost.")
+    words = {}
+    for w, say in rows:
+        w, say = str(w).strip(), str(say).strip()
+        if w and say:
+            words[w] = say
+    ov["words"] = words
+    ov.setdefault("_about", "Pronunciations for TTS Studio. 'words' = whole-word swaps (capitals matter), edited "
+                            "in the studio. 'lines' = exact replacement for one whole line, edited here by hand.")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(ov, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)  # all or nothing: a crash mid-write can't leave a half-written file
+    return pronunciations()
 
 
 # ── folder browser for the Chatterbox picker (browsers can't hand a page a local path) ──────────────────────
@@ -353,6 +383,8 @@ class H(BaseHTTPRequestHandler):
                               ctype + "; charset=utf-8")
         if u.path == "/api/state":
             return self._json(state())
+        if u.path == "/api/pronunciations":
+            return self._json(pronunciations())
         if u.path == "/api/browse":
             return self._json(browse(parse_qs(u.query).get("path", [""])[0]))
         if u.path != "/":
@@ -369,12 +401,14 @@ class H(BaseHTTPRequestHandler):
             if self.path == "/api/render":
                 engine = data["engine"]
                 p = {**DEFAULTS[engine], **data["preset"]}
-                wav, spoken = render(engine, p, data["text"])
+                wav, spoken, warning = render(engine, p, data["text"])
                 rid = time.strftime("%Y%m%d_%H%M%S") + f"{int(time.time() * 1000) % 1000:03d}"
                 RENDERS[rid] = (wav, p, engine, data["text"], spoken)
                 for old in sorted(RENDERS)[:-20]:
                     RENDERS.pop(old)
                 extra = {"X-Spoken": quote("\n".join(spoken)), "X-Render-Id": rid}
+                if warning:
+                    extra["X-Warning"] = quote(warning)
                 if engine == "chatterbox" and Chatterbox.watermark is not None:
                     extra["X-Watermark"] = "on" if Chatterbox.watermark else "off"
                 return self._send(200, wav, "audio/wav", extra)
@@ -397,6 +431,8 @@ class H(BaseHTTPRequestHandler):
                 open(os.path.join(d, "input.txt"), "w", encoding="utf-8", newline="\n").write(text)
                 open(os.path.join(d, "spoken.txt"), "w", encoding="utf-8", newline="\n").write("\n".join(spoken) + "\n")
                 return self._send(200, f"Saved. Your take is in {d}")
+            if self.path == "/api/pronunciations":
+                return self._json(save_pronunciations(data.get("words", [])))
             if self.path == "/api/kokoro/download":
                 if not DOWNLOAD["running"]:
                     threading.Thread(target=download_kokoro, daemon=True).start()
