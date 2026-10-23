@@ -38,7 +38,7 @@ reply(ready=True, watermark=WATERMARK, device=dev)
 for line in sys.stdin:
     try:
         req = json.loads(line)
-        parts = []
+        parts, starts, pos = [], [], 0
         for i, (said, gap) in enumerate(zip(req["lines"], req["gaps"])):
             torch.manual_seed(int(req["seed"]) + i)  # per-line seed: editing one line leaves the others identical
             wav = model.generate(said, audio_prompt_path=req.get("ref") or None,
@@ -46,9 +46,10 @@ for line in sys.stdin:
                                  temperature=float(req["temperature"]))
             w = wav.squeeze(0).cpu().numpy()
             parts += [w, np.zeros(int(model.sr * float(gap)), dtype=w.dtype)]
+            starts.append(pos / model.sr); pos += len(w) + int(model.sr * float(gap))
         pcm = (np.clip(np.concatenate(parts), -1, 1) * 32767).astype("<i2")
         with wave.open(req["out"], "wb") as f:
             f.setnchannels(1); f.setsampwidth(2); f.setframerate(model.sr); f.writeframes(pcm.tobytes())
-        reply(ok=True)
+        reply(ok=True, starts=starts)  # when each line starts, so the page can light it while playing
     except Exception as e:
         reply(ok=False, error=f"{type(e).__name__}: {e}")

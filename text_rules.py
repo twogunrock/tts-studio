@@ -54,17 +54,18 @@ def apply_overrides(lines, ov):
     return out
 
 
-def join_labels(lines, max_len=40):
+def join_labels(items, max_len=40):
     """A short label ending in ':' ("Tech Support:", "with:") is read with the line after it, not as its own
-    piece. Longer lead-ins ("…helps create a culture of:") stay separate."""
-    out, carry = [], ""
-    for ln in lines:
+    piece. Longer lead-ins ("…helps create a culture of:") stay separate. Items are (source lines, text); a joined
+    piece keeps the source lines of both, so the page can light both while it plays."""
+    out, carry = [], None
+    for src, ln in items:
         if carry:
-            ln, carry = f"{carry} {ln}", ""
+            src, ln, carry = carry[0] + src, f"{carry[1]} {ln}", None
         if ln.endswith(":") and len(ln) <= max_len:
-            carry = ln
+            carry = (src, ln)
             continue
-        out.append(ln)
+        out.append((src, ln))
     if carry:
         out.append(carry)
     return out

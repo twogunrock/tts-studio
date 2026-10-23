@@ -8,13 +8,8 @@ let ENGINE = 'kokoro', LAST = null;
 /* ── small shared pieces ───────────────────────────────────────────────────── */
 document.querySelectorAll('[data-explain]').forEach(b => {
   const box = $(b.dataset.explain);
-  b.dataset.label = b.textContent;
   b.setAttribute('aria-controls', box.id); b.setAttribute('aria-expanded', 'false'); box.hidden = true;
-  b.addEventListener('click', () => {
-    const open = box.hidden; box.hidden = !open;
-    b.setAttribute('aria-expanded', String(open));
-    b.textContent = open ? 'Hide the explanation' : b.dataset.label;
-  });
+  b.addEventListener('click', () => { box.hidden = !box.hidden; b.setAttribute('aria-expanded', String(!box.hidden)); });
 });
 function slider(id, value, words){
   const r = $(id), out = $(id + '_now');
@@ -25,11 +20,22 @@ function slider(id, value, words){
 const band = (v, lo, hi, a, b, c) => v < lo ? a : v > hi ? c : b;
 const secs = v => v === 0 ? 'no pause' : (v === 1 ? '1 second' : v + ' seconds');
 function setStatus(text, kind){ const s = $('status'); s.textContent = text; s.className = 'status' + (kind ? ' ' + kind : ''); }
-function onAir(on, text){ $('onair').classList.toggle('live', on); $('onair-text').textContent = on ? (text || 'Creating audio…') : 'Ready'; }
+/* The on-air light: grey when idle, red while creating or playing. */
+function onAir(on, text){ $('onair').classList.toggle('live', on); $('onair-text').textContent = on ? text : 'Ready'; }
 async function api(path, body){
-  const r = await fetch(path, {method:'POST', body:JSON.stringify(body || {})});
-  return r;
+  return fetch(path, {method:'POST', body:JSON.stringify(body || {})});
 }
+
+/* ── light / dark (the first choice is made in page.html before the page draws) ── */
+function themeLabel(){
+  const dark = document.documentElement.dataset.theme === 'dark';
+  $('theme').setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+}
+$('theme').addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next; store.set('theme', next); themeLabel(); drawWave();
+});
+themeLabel();
 
 /* ── guide ─────────────────────────────────────────────────────────────────── */
 $('guide-open').addEventListener('click', () => $('guide').showModal());
@@ -45,7 +51,31 @@ function banner(){
   $('banner').innerHTML = h ? `<div class="note">${h}</div>` : '';
 }
 
-/* ── tabs ──────────────────────────────────────────────────────────────────── */
+/* ── settings drawer (phones) ──────────────────────────────────────────────── */
+function drawer(open){
+  $('rail').classList.toggle('open', open); $('scrim').hidden = !open;
+  $('rail-open').setAttribute('aria-expanded', String(open));
+  if (open) $('rail-close').focus(); else if (matchMedia('(max-width:900px)').matches) $('rail-open').focus();
+}
+$('rail-open').addEventListener('click', () => drawer(true));
+$('rail-close').addEventListener('click', () => drawer(false));
+$('scrim').addEventListener('click', () => drawer(false));
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('rail').classList.contains('open')) drawer(false); });
+function summary(){
+  let s;
+  if (ENGINE === 'kokoro') {
+    const names = [...$('voices').querySelectorAll('select')].map(x => voiceLabel(x.value).split(' (')[0]);
+    s = `${names.join(', ')} · ${(+$('k_speed').value).toFixed(2)}×`;
+  } else if (!STATE.chatterbox.python) s = 'Chatterbox isn\'t set up yet';
+  else {
+    const style = [...$('styles').children].find(b => b.getAttribute('aria-pressed') === 'true');
+    s = `${$('c_ref').selectedOptions[0]?.textContent || ''} · ${style ? style.textContent : 'Custom style'}`;
+  }
+  $('rail-sum').textContent = s;
+}
+$('rail').addEventListener('input', summary); $('rail').addEventListener('change', summary);
+
+/* ── engines ───────────────────────────────────────────────────────────────── */
 function showEngine(e){
   ENGINE = e; store.set('engine', e);
   ['kokoro', 'chatterbox'].forEach(x => {
@@ -53,10 +83,10 @@ function showEngine(e){
     $('tab-' + x).tabIndex = x === e ? 0 : -1;
     $('engine-' + x).hidden = x !== e;
   });
-  refreshCreate(); banner();
+  showChatterbox(); refreshCreate(); banner(); summary();
 }
 ['kokoro', 'chatterbox'].forEach(x => $('tab-' + x).addEventListener('click', () => showEngine(x)));
-document.querySelector('.tabs').addEventListener('keydown', ev => {
+document.querySelector('.engine').addEventListener('keydown', ev => {
   if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
   const next = ENGINE === 'kokoro' ? 'chatterbox' : 'kokoro'; showEngine(next); $('tab-' + next).focus();
 });
@@ -64,12 +94,13 @@ function engineReady(){
   if (STATE.preview) return true;
   return ENGINE === 'kokoro' ? !STATE.kokoro.missing.length : !!STATE.chatterbox.python;
 }
+const NOT_READY = {kokoro: 'Download the voice model in Voice settings to start creating audio.',
+                   chatterbox: 'Finish setting up Chatterbox (the steps are above your script), or switch back to Kokoro.'};
 function refreshCreate(){
   const ok = engineReady();
   $('create').disabled = $('create-sel').disabled = !ok;
-  if (!ok) setStatus(ENGINE === 'kokoro' ? 'Download the voice model in step 1 to start creating audio.'
-                                         : 'Finish setting up Chatterbox in step 1, or switch back to Kokoro.');
-  else if ($('status').textContent.startsWith('Download the voice') || $('status').textContent.startsWith('Finish setting')) setStatus('');
+  if (!ok) setStatus(NOT_READY[ENGINE]);
+  else if (Object.values(NOT_READY).includes($('status').textContent)) setStatus('');
 }
 
 /* ── Kokoro: voices, blend, download ───────────────────────────────────────── */
@@ -87,7 +118,7 @@ function voiceOptions(sel){
   return Object.entries(groups).map(([g, vs]) => `<optgroup label="${esc(g)}">` +
     vs.map(v => `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(voiceLabel(v))}</option>`).join('') + '</optgroup>').join('');
 }
-const SWATCH = ['var(--accent)', 'var(--signal)', '#6C8EBF', '#B5739D', '#8AA05A', '#C2695B'];
+const SWATCH = ['var(--knob)', '#C8901A', '#6C8EBF', '#B5739D', '#8AA05A', '#C2695B'];
 function drawBlend(){
   const rows = [...$('voices').children], ws = rows.map(r => +r.querySelector('input').value), tot = ws.reduce((a, b) => a + b, 0) || 1;
   rows.forEach((r, i) => { r.querySelector('.share').textContent = Math.round(ws[i] / tot * 100) + '%'; r.querySelector('.remove').hidden = rows.length === 1; });
@@ -100,12 +131,12 @@ function voiceRow(v, w){
     <input type="range" min="0" max="1" step="0.05" value="${w}" aria-label="Share of voice ${n}">
     <button class="remove" type="button">Remove</button>`;
   d.querySelector('input').addEventListener('input', drawBlend);
-  d.querySelector('.remove').addEventListener('click', () => { d.remove(); drawBlend(); });
+  d.querySelector('.remove').addEventListener('click', () => { d.remove(); drawBlend(); summary(); });
   $('voices').appendChild(d);
 }
 $('add-voice').addEventListener('click', () => {
   const used = [...$('voices').querySelectorAll('select')].map(s => s.value);
-  voiceRow(VOICES.find(v => !used.includes(v)) || VOICES[0], 0.5); drawBlend();
+  voiceRow(VOICES.find(v => !used.includes(v)) || VOICES[0], 0.5); drawBlend(); summary();
 });
 function showDownload(){
   const need = !STATE.preview && STATE.kokoro.missing.length, dl = STATE.kokoro.download;
@@ -134,7 +165,8 @@ const STYLES = [  /* Expressive follows the Chatterbox authors' tip: more exagge
 const KNOBS = ['exaggeration', 'cfg_weight', 'temperature'];
 function showChatterbox(){
   const ready = !!STATE.chatterbox.python;
-  $('cb-setup').hidden = ready; $('cb-ready').hidden = !ready;
+  $('cb-setup').hidden = ready || ENGINE !== 'chatterbox';
+  $('cb-rail-setup').hidden = ready; $('cb-ready').hidden = !ready;
   if (ready) $('cb-using').textContent = STATE.chatterbox.python;
 }
 function describeCheck(r){
@@ -142,7 +174,7 @@ function describeCheck(r){
   const gpu = r.gpu ? `Graphics card: <b>${esc(r.gpu)}</b>.` : '<b>No graphics card found.</b> It will work, but slowly (about 20 times slower than real time).';
   const wm = r.watermark ? 'Watermark: <b>on</b>.' : '<b>Watermark is off.</b> Run <code>pip install "setuptools&lt;81"</code> in that environment, then check again.';
   return `<p class="ok"><b>Found Chatterbox ${esc(r.chatterbox)}</b> (Python ${esc(r.python_version)}).</p><p>${gpu} ${wm}</p>
-    <div class="actions"><button class="btn" type="button" id="cb-use">Use this Chatterbox</button></div>`;
+    <div class="row"><button class="btn" type="button" id="cb-use">Use this Chatterbox</button></div>`;
 }
 $('cb-check').addEventListener('click', async () => {
   const path = $('cb-path').value.trim();
@@ -152,11 +184,12 @@ $('cb-check').addEventListener('click', async () => {
   $('cb-result').innerHTML = describeCheck(r);
   if (r.ok) $('cb-use').addEventListener('click', async () => {
     const res = await api('/api/chatterbox/use', {path});
-    if (res.ok) { Object.assign(STATE, await res.json()); showChatterbox(); refreshCreate(); setStatus('Chatterbox is ready. The first time you create audio it downloads its model (about 3 GB), so allow a few minutes.', 'ok'); }
+    if (res.ok) { Object.assign(STATE, await res.json()); showChatterbox(); refreshCreate(); summary();
+      setStatus('Chatterbox is ready. The first time you create audio it downloads its model (about 3 GB), so allow a few minutes.', 'ok'); }
   });
 });
 $('cb-forget').addEventListener('click', async () => {
-  Object.assign(STATE, await (await api('/api/chatterbox/forget')).json()); showChatterbox(); refreshCreate();
+  Object.assign(STATE, await (await api('/api/chatterbox/forget')).json()); showChatterbox(); refreshCreate(); summary();
 });
 /* Folder browser: the server lists folders, because a web page can't see local paths. */
 async function browseTo(path){
@@ -182,7 +215,7 @@ function markStyle(){
 }
 STYLES.forEach(s => {
   const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = s.name;
-  b.addEventListener('click', () => KNOBS.forEach(k => { $('c_' + k).value = s[k]; $('c_' + k).dispatchEvent(new Event('input')); }));
+  b.addEventListener('click', () => { KNOBS.forEach(k => { $('c_' + k).value = s[k]; $('c_' + k).dispatchEvent(new Event('input', {bubbles: true})); }); });
   $('styles').appendChild(b);
 });
 $('new-take').addEventListener('click', () => { $('c_seed').value = Math.floor(Math.random() * 99999); setStatus('New take number set. Create audio to hear it.'); });
@@ -196,22 +229,34 @@ function settings(){
     gap_head: +$('c_gap_head').value, fixes: $('c_fixes').checked};
 }
 
-/* ── create, save, remember ────────────────────────────────────────────────── */
-function countLines(){
-  const n = $('text').value.split('\n').filter(l => l.trim()).length;
+/* ── the script: a textarea over a mirror that numbers lines and lights the one being spoken ── */
+function drawMirror(){
+  const ta = $('text');
+  $('mirror').innerHTML = ta.value.split('\n').map(l => `<div class="ml${l.trim() ? ' n' : ''}">${esc(l) || '​'}</div>`).join('');
+  ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px';  // grow with the text, so the page scrolls instead of the box
+  const n = ta.value.split('\n').filter(l => l.trim()).length;
   $('script-meta').textContent = n === 1 ? '1 line, spoken as 1 piece' : `${n} lines, spoken as ${n} separate pieces`;
+  lightLine(-1);
 }
+$('text').addEventListener('input', drawMirror);
+window.addEventListener('resize', () => { drawMirror(); drawWave(); });
+
+/* ── create, save, remember ────────────────────────────────────────────────── */
+/* TAKE: what the current audio was made from. Lines light up only while the script still matches it. */
+let TAKE = null;
 async function create(selectionOnly){
   const ta = $('text');
-  let t = ta.value;
+  let t = ta.value, offset = 0;
   if (selectionOnly){
     t = ta.value.substring(ta.selectionStart, ta.selectionEnd);
     if (!t.trim()) { setStatus('Select one or more lines in the script first, then try again.', 'bad'); return; }
+    offset = ta.value.substring(0, ta.selectionStart).split('\n').length - 1;
   }
   if (!t.trim()) { setStatus('The script is empty. Type or paste what you want spoken.', 'bad'); return; }
   const first = !STATE.preview && (ENGINE === 'kokoro' ? !STATE.kokoro.loaded : !STATE.chatterbox.running);
   const name = ENGINE === 'kokoro' ? 'Kokoro' : 'Chatterbox';
-  onAir(true, `${name} is creating audio…`);
+  stopPlaying();
+  onAir(true, 'Creating…');
   setStatus(first ? (ENGINE === 'kokoro' ? 'Loading Kokoro, then creating audio. The first run takes a few extra seconds.'
                                          : 'Starting Chatterbox, then creating audio. The very first time it downloads its model (about 3 GB), so this can take several minutes.')
                   : 'Creating audio. With Kokoro that takes seconds; with Chatterbox, about as long as the audio itself on a graphics card.');
@@ -225,14 +270,17 @@ async function create(selectionOnly){
       const wm = r.headers.get('X-Watermark'); if (wm) { STATE.chatterbox.watermark = wm === 'on'; banner(); } }
     const lines = decodeURIComponent(r.headers.get('X-Spoken') || '').split('\n').filter(Boolean);
     $('read').innerHTML = lines.map(l => `<li>${esc(l)}</li>`).join('');
-    $('read').hidden = false; $('read-empty').hidden = true;
+    $('read-card').hidden = false;
+    TAKE = {script: ta.value, offset, pieces: JSON.parse(decodeURIComponent(r.headers.get('X-Pieces') || '%5B%5D'))};
     LAST = r.headers.get('X-Render-Id'); $('save').disabled = false;
-    const b = await r.blob(); $('audio').src = URL.createObjectURL(b); $('audio').play().catch(() => {});
+    const b = await r.blob();
+    await loadTake(b);
     const warn = r.headers.get('X-Warning');
-    setStatus(warn ? decodeURIComponent(warn) : `${name} audio ready in ${((Date.now() - t0) / 1000).toFixed(1)} seconds. Press play to hear it again.`, warn ? 'bad' : 'ok');
+    setStatus(warn ? decodeURIComponent(warn) : `${name} audio ready in ${((Date.now() - t0) / 1000).toFixed(1)} seconds.`, warn ? 'bad' : 'ok');
+    $('audio').play().catch(() => {});
   } catch (e) {
     setStatus('The studio stopped responding. Check the window it is running in, then reload this page.', 'bad');
-  } finally { onAir(false); refreshCreate(); }
+  } finally { if ($('audio').paused) onAir(false); refreshCreate(); }
 }
 $('create').addEventListener('click', () => create(false));
 $('create-sel').addEventListener('click', () => create(true));
@@ -245,7 +293,69 @@ $('remember').addEventListener('click', async () => {
   const r = await api('/api/preset', {engine: ENGINE, preset: settings()});
   setStatus(await r.text(), r.ok ? 'ok' : 'bad');
 });
-$('text').addEventListener('input', countLines);
+
+/* ── player: play button, waveform you can click or drag, and the lit line ──── */
+const audio = $('audio');
+let PEAKS = null, RAF = 0;
+const clock = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+async function loadTake(blob){
+  if (audio.src) URL.revokeObjectURL(audio.src);
+  audio.src = URL.createObjectURL(blob);
+  $('play').disabled = $('seek').disabled = false;
+  PEAKS = null;
+  try {  // the waveform is drawn from the take itself
+    const Ctx = window.AudioContext || window.webkitAudioContext, ctx = new Ctx();
+    const buf = await ctx.decodeAudioData(await blob.arrayBuffer()); ctx.close();
+    const data = buf.getChannelData(0), n = 600, step = Math.max(1, Math.floor(data.length / n));
+    PEAKS = Array.from({length: n}, (_, i) => { let m = 0; for (let j = i * step; j < Math.min(data.length, (i + 1) * step); j++) m = Math.max(m, Math.abs(data[j])); return m; });
+    const top = Math.max(...PEAKS) || 1; PEAKS = PEAKS.map(p => p / top);
+  } catch (e) { PEAKS = null; }
+  drawWave();
+}
+function drawWave(){
+  const c = $('wave'), r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  if (!r.width) return;
+  c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+  const g = c.getContext('2d'), css = getComputedStyle(document.documentElement);
+  const on = css.getPropertyValue('--booth-ink').trim(), off = css.getPropertyValue('--booth-dim').trim();
+  const bw = 3 * dpr, gap = 2 * dpr, bars = Math.floor(c.width / (bw + gap)), mid = c.height / 2;
+  const done = audio.duration ? audio.currentTime / audio.duration : 0;
+  g.clearRect(0, 0, c.width, c.height);
+  for (let i = 0; i < bars; i++) {
+    const p = PEAKS ? PEAKS[Math.floor(i / bars * PEAKS.length)] : 0.04;
+    const h = Math.max(2 * dpr, p * (c.height - 4 * dpr));
+    g.globalAlpha = i / bars < done ? 1 : 0.45; g.fillStyle = i / bars < done ? on : off;
+    g.fillRect(i * (bw + gap), mid - h / 2, bw, h);
+  }
+  g.globalAlpha = 1;
+}
+function lightLine(piece){
+  [...$('mirror').children].forEach(d => d.classList.remove('lit'));
+  [...$('read').children].forEach((li, i) => li.classList.toggle('lit', i === piece));
+  if (piece < 0 || !TAKE || TAKE.script !== $('text').value) return;  // script edited since: the line numbers no longer match
+  const rows = $('mirror').children;
+  TAKE.pieces[piece][1].forEach(i => rows[i + TAKE.offset] && rows[i + TAKE.offset].classList.add('lit'));
+}
+function pieceAt(t){
+  if (!TAKE || !TAKE.pieces.length) return -1;
+  let k = 0; TAKE.pieces.forEach((p, i) => { if (p[0] <= t + 0.01) k = i; }); return k;
+}
+let LIT = -2;
+function tick(){
+  $('time').textContent = `${clock(audio.currentTime)} / ${clock(audio.duration)}`;
+  if (audio.duration) $('seek').value = Math.round(audio.currentTime / audio.duration * 1000);
+  const k = audio.paused && audio.currentTime === 0 ? -1 : pieceAt(audio.currentTime);
+  if (k !== LIT) { LIT = k; lightLine(k); }
+  drawWave();
+}
+function loop(){ tick(); if (!audio.paused) RAF = requestAnimationFrame(loop); }
+function stopPlaying(){ audio.pause(); }
+audio.addEventListener('play', () => { $('play').classList.add('playing'); $('play').setAttribute('aria-label', 'Pause'); onAir(true, 'On air'); cancelAnimationFrame(RAF); loop(); });
+audio.addEventListener('pause', () => { $('play').classList.remove('playing'); $('play').setAttribute('aria-label', 'Play'); onAir(false); tick(); });
+audio.addEventListener('ended', () => { LIT = -2; lightLine(-1); });
+audio.addEventListener('loadedmetadata', tick);
+$('play').addEventListener('click', () => audio.paused ? audio.play().catch(() => {}) : audio.pause());
+$('seek').addEventListener('input', () => { if (audio.duration) { audio.currentTime = $('seek').value / 1000 * audio.duration; tick(); } });
 
 /* ── pronunciations: saved to overrides.json as you type ───────────────────── */
 let pronTimer = null, pronBroken = false;
@@ -254,9 +364,10 @@ function pronRows(){ return [...$('pron-rows').children].map(r => [r.querySelect
 function pronEmpty(){ $('pron-empty').hidden = $('pron-rows').children.length > 0; }
 function pronRow(word, say){
   const d = document.createElement('div'); d.className = 'pron-row';
-  d.innerHTML = `<input class="p-word" type="text" aria-label="Written as" placeholder="e.g. SQL" spellcheck="false">
-    <input class="p-say" type="text" aria-label="Say it as" placeholder="e.g. sequel" spellcheck="false">
-    <button class="btn plain hear" type="button">Hear it</button><button class="remove" type="button">Remove</button>`;
+  d.innerHTML = `<input class="p-word" type="text" aria-label="Written as" placeholder="Written as" spellcheck="false">
+    <span class="arrow" aria-hidden="true">→</span>
+    <input class="p-say" type="text" aria-label="Say it as" placeholder="Say it as" spellcheck="false">
+    <span class="pron-actions"><button class="linkish hear" type="button">Hear it</button><button class="linkish remove" type="button">Remove</button></span>`;
   d.querySelector('.p-word').value = word; d.querySelector('.p-say').value = say;
   d.querySelectorAll('input').forEach(i => i.addEventListener('input', queuePronSave));
   d.querySelector('.remove').addEventListener('click', () => { d.remove(); pronEmpty(); queuePronSave(); });
@@ -278,7 +389,7 @@ async function savePron(){
 async function hear(row){
   const word = row.querySelector('.p-word').value.trim(), say = row.querySelector('.p-say').value.trim();
   if (!word && !say) { pronStatus('Type a word first, then press Hear it.', 'bad'); return; }
-  if (!engineReady()) { pronStatus(ENGINE === 'kokoro' ? 'Download the voice model in step 1 first.' : 'Finish setting up Chatterbox first, or switch to Kokoro.', 'bad'); return; }
+  if (!engineReady()) { pronStatus(ENGINE === 'kokoro' ? 'Download the voice model first.' : 'Finish setting up Chatterbox first, or switch to Kokoro.', 'bad'); return; }
   const btn = row.querySelector('.hear'); btn.disabled = true; pronStatus(`Speaking "${say || word}"…`);
   try {
     const r = await api('/api/render', {engine: ENGINE, preset: {...settings(), fixes: false}, text: say || word});
@@ -321,7 +432,9 @@ slider('c_temperature', C.temperature, v => v.toFixed(2) + ', ' + band(v, 0.65, 
 slider('c_gap_line', C.gap_line, secs); slider('c_gap_head', C.gap_head, secs);
 KNOBS.forEach(k => $('c_' + k).addEventListener('input', markStyle)); markStyle();
 $('c_seed').value = C.seed; $('c_fixes').checked = C.fixes;
-$('text').value = SAMPLE; countLines();
-showChatterbox(); showDownload(); loadPron();
+$('text').value = SAMPLE; drawMirror();
+showDownload(); loadPron();
 if (STATE.kokoro.download.running) pollDownload();
 showEngine(store.get('engine') === 'chatterbox' ? 'chatterbox' : 'kokoro');
+drawWave();
+if (document.fonts) document.fonts.ready.then(() => { drawMirror(); drawWave(); });  // line wrapping changes once the fonts arrive

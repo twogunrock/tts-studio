@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {"model_dir": os.path.join(HERE, "models"), "exports_dir": os.p
 KOKORO_FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 BUILTIN = "(built-in voice)"
+STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".woff2": "font/woff2"}
 DEFAULTS = {
     "kokoro": {"voices": [["af_heart", 0.5], ["af_nova", 0.25], ["af_sarah", 0.25]], "speed": 1.0,
                "gap_line": 0.25, "gap_head": 0.6, "fixes": True},
@@ -113,13 +114,14 @@ class Kokoro:
             raise ValueError("Give at least one voice a share above zero.")
         weights = np.array([w for _, w in parts]); weights /= weights.sum()
         style = sum(k.get_voice_style(v) * w for (v, _), w in zip(parts, weights))
-        out, sr = [], 24000
+        out, sr, starts, pos = [], 24000, [], 0
         for said, gap in zip(spoken, gaps):
             a, sr = k.create(said, voice=style, speed=float(p["speed"]), lang="en-us")
             out += [a, np.zeros(int(sr * gap), dtype=a.dtype)]
+            starts.append(pos); pos += len(a) + int(sr * gap)
         buf = io.BytesIO()
         sf.write(buf, np.concatenate(out), sr, format="WAV")
-        return buf.getvalue()
+        return buf.getvalue(), [s / sr for s in starts]
 
 
 def download_kokoro():
@@ -241,7 +243,7 @@ class Chatterbox:
                 r = cls._read()
                 if not r.get("ok"):
                     raise RuntimeError(f"Chatterbox couldn't create that audio: {r.get('error')}")
-                return open(out, "rb").read()
+                return open(out, "rb").read(), r.get("starts", [])
             finally:
                 os.remove(out)
 
@@ -252,23 +254,26 @@ def is_head(ln):
 
 
 def prepare(engine, p, text):
-    """Returns (spoken lines, pause after each, warning). Kokoro gets the punctuation rules; both get the word swaps."""
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    """Returns (spoken pieces, pause after each, source lines of each, warning). Kokoro gets the punctuation rules;
+    both get the word swaps. Source lines index text.split("\\n"), so the page can light the line being spoken."""
+    items = [([i], l.strip()) for i, l in enumerate(text.split("\n")) if l.strip()]
     warning = ""
     if p["fixes"]:
         ov, warning = tr.load_overrides(config()["overrides"])
-        lines = tr.apply_overrides(lines, ov)
+        items = [(src, out) for src, l in items for out in tr.apply_overrides([l], ov)]
         if engine == "kokoro":
-            lines = tr.split_long(tr.join_labels(lines))
+            items = [(src, out) for src, l in tr.join_labels(items) for out in tr.split_long([l])]
+    lines = [l for _, l in items]
     spoken = [tr.clean(l) for l in lines] if engine == "kokoro" and p["fixes"] else lines
     gaps = [float(p["gap_head"] if is_head(l) else p["gap_line"]) for l in lines]
-    return spoken, gaps, warning
+    return spoken, gaps, [src for src, _ in items], warning
 
 
 def tone_wav(spoken, gaps, sr=24000):
     """Preview stand-in for speech: one short beep per line, then that line's pause, so pacing still shows."""
-    frames = bytearray()
+    frames, starts = bytearray(), []
     for ln, gap in zip(spoken, gaps):
+        starts.append(len(frames) / 2 / sr)
         n = int(sr * min(0.15 + 0.012 * len(ln), 1.2))
         for i in range(n):
             frames += struct.pack("<h", int(6000 * min(1.0, i / 400, (n - i) / 400) * math.sin(2 * math.pi * 440 * i / sr)))
@@ -276,26 +281,29 @@ def tone_wav(spoken, gaps, sr=24000):
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr); w.writeframes(bytes(frames))
-    return buf.getvalue()
+    return buf.getvalue(), starts
 
 
 def render(engine, p, text):
-    """Returns (wav bytes, spoken lines, warning)."""
-    spoken, gaps, warning = prepare(engine, p, text)
+    """Returns (wav bytes, spoken pieces, [[start second, source lines], …] per piece, warning)."""
+    spoken, gaps, srcs, warning = prepare(engine, p, text)
     if not spoken:
         raise ValueError("The script is empty. Type or paste what you want spoken.")
     if PREVIEW:
-        return tone_wav(spoken, gaps), spoken, warning
-    with RENDER_LOCK:
-        if engine == "kokoro":
-            if Kokoro.missing():
-                raise ValueError("The Kokoro voice model isn't downloaded yet. Use the download button in step 1.")
-            Chatterbox.stop()  # one model in memory at a time
-            return Kokoro.synth(p, spoken, gaps), spoken, warning
-        if not config()["chatterbox_python"]:
-            raise ValueError("Chatterbox isn't set up yet. Follow the steps on the Chatterbox tab first.")
-        Kokoro.unload()
-        return Chatterbox.synth(p, spoken, gaps), spoken, warning
+        wav, starts = tone_wav(spoken, gaps)
+    else:
+        with RENDER_LOCK:
+            if engine == "kokoro":
+                if Kokoro.missing():
+                    raise ValueError("The Kokoro voice model isn't downloaded yet. Use the download button on the left.")
+                Chatterbox.stop()  # one model in memory at a time
+                wav, starts = Kokoro.synth(p, spoken, gaps)
+            else:
+                if not config()["chatterbox_python"]:
+                    raise ValueError("Chatterbox isn't set up yet. Follow the set-up steps on the Chatterbox side first.")
+                Kokoro.unload()
+                wav, starts = Chatterbox.synth(p, spoken, gaps)
+    return wav, spoken, [[round(s, 3), src] for s, src in zip(starts, srcs)], warning
 
 
 # ── pronunciations (overrides.json): the page edits "words"; "lines" stays a file-only power feature ─────────
@@ -377,10 +385,13 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         u = urlparse(self.path)
-        if u.path in ("/static/studio.css", "/static/app.js"):
-            ctype = "text/css" if u.path.endswith(".css") else "text/javascript"
-            return self._send(200, open(os.path.join(HERE, "static", u.path.rsplit("/", 1)[1]), "rb").read(),
-                              ctype + "; charset=utf-8")
+        if u.path.startswith("/static/"):
+            root = os.path.join(HERE, "static")
+            f = os.path.normpath(os.path.join(root, u.path[len("/static/"):]))
+            ctype = STATIC_TYPES.get(os.path.splitext(f)[1])
+            if ctype and f.startswith(root + os.sep) and os.path.isfile(f):
+                return self._send(200, open(f, "rb").read(), ctype)
+            return self._send(404, "not found")
         if u.path == "/api/state":
             return self._json(state())
         if u.path == "/api/pronunciations":
@@ -401,12 +412,12 @@ class H(BaseHTTPRequestHandler):
             if self.path == "/api/render":
                 engine = data["engine"]
                 p = {**DEFAULTS[engine], **data["preset"]}
-                wav, spoken, warning = render(engine, p, data["text"])
+                wav, spoken, pieces, warning = render(engine, p, data["text"])
                 rid = time.strftime("%Y%m%d_%H%M%S") + f"{int(time.time() * 1000) % 1000:03d}"
                 RENDERS[rid] = (wav, p, engine, data["text"], spoken)
                 for old in sorted(RENDERS)[:-20]:
                     RENDERS.pop(old)
-                extra = {"X-Spoken": quote("\n".join(spoken)), "X-Render-Id": rid}
+                extra = {"X-Spoken": quote("\n".join(spoken)), "X-Pieces": quote(json.dumps(pieces)), "X-Render-Id": rid}
                 if warning:
                     extra["X-Warning"] = quote(warning)
                 if engine == "chatterbox" and Chatterbox.watermark is not None:
