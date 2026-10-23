@@ -3,3 +3,5 @@ kokoro-onnx==0.6.1
 soundfile==0.14.0
 onnxruntime==1.31.0
 numpy==2.5.4
+# Lets Python check HTTPS certificates the way the browser does (the voice model download failed on Windows without it)
+truststore==0.10.5

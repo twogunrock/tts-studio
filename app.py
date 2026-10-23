@@ -17,6 +17,12 @@ from urllib.request import urlopen
 
 import text_rules as tr
 
+try:  # check HTTPS certificates with the computer's own trust store (Windows fetches missing roots on demand; Python alone can't)
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG, PRESET = os.path.join(HERE, "config.json"), os.path.join(HERE, "preset.json")
 WORKER, LOG = os.path.join(HERE, "chatterbox_worker.py"), os.path.join(HERE, "chatterbox.log")
@@ -137,7 +143,12 @@ def download_kokoro():
                     out.write(chunk); DOWNLOAD["done"] += len(chunk)
             os.replace(os.path.join(d, f + ".part"), os.path.join(d, f))
     except Exception as e:
-        DOWNLOAD["error"] = f"The download stopped: {e}. Check the internet connection and try again."
+        if "CERTIFICATE_VERIFY_FAILED" in str(e):
+            DOWNLOAD["error"] = ("The download stopped: this computer couldn't confirm GitHub's security certificate. "
+                                 "Close the studio's window and double-click the start file again (it repairs the "
+                                 f"set-up), then try again. Details: {e}")
+        else:
+            DOWNLOAD["error"] = f"The download stopped: {e}. Check the internet connection and try again."
     DOWNLOAD["running"] = False
 
 
