@@ -35,7 +35,7 @@ It's built for people who need a voice-over and don't want to learn audio softwa
 3. The first time, it sets itself up: about 300 MB and a few minutes. Then the studio opens in your browser.
 4. Press **Download the voice model** (about 350 MB, once). After that Kokoro works without the internet.
 
-Next time, double-click the same file and the studio opens straight away. Leave its window open while you use the studio; close it to stop.
+Next time, double-click the same file and the studio opens straight away. There's no window to keep open: the studio runs in the background while its browser tab is open, and stops by itself a minute or two after you close the tab. If something goes wrong, `studio.log` in the folder says what happened.
 
 Everything, including its own copy of Python, is installed inside the folder. Nothing else on your computer changes, and deleting the folder removes TTS Studio completely.
 

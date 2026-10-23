@@ -12,7 +12,7 @@ DONE="$HERE/.venv/installed-requirements.txt"
 
 failed() {
   echo
-  echo "  Setup didn't finish. If TTS Studio is open in another window, close that window first."
+  echo "  Setup didn't finish. If TTS Studio is open in your browser, close its tab and wait two minutes first."
   echo "  Check your internet connection, then run this file again: it picks up where it stopped."
   echo "  If it keeps failing, copy the messages above into an issue at"
   echo "  https://github.com/twogunrock/tts-studio/issues"
@@ -43,7 +43,8 @@ if ! cmp -s "$HERE/requirements.txt" "$DONE"; then
 fi
 
 echo
-"$PY" "$HERE/app.py" --open
-[ $? -eq 3 ] && exit 0  # it was already running; the browser has been opened
-echo
-echo "  TTS Studio has stopped. You can close this window."
+echo "  Opening TTS Studio in your browser. You can close this window."
+echo "  The studio stops on its own a minute or two after you close its browser tab."
+# In the background, detached from this window; messages go to studio.log.
+nohup "$PY" "$HERE/app.py" --open --quit-when-closed >> "$HERE/studio.log" 2>&1 < /dev/null &
+sleep 2

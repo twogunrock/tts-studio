@@ -45,11 +45,24 @@ if (!store.get('seen-guide')) { $('guide').showModal(); store.set('seen-guide', 
 /* ── banner (preview mode, missing pieces) ─────────────────────────────────── */
 function banner(){
   let h = '';
-  if (STATE.preview) h = '<b>Preview mode.</b> No voice model is loaded, so Create audio plays a short tone for each line instead of speech. Everything else works: try the controls, and check the pacing and the cleaned-up text.';
+  if (STOPPED) h = '<b>TTS Studio has stopped.</b> It stops by itself after its page is closed. To keep working, double-click the start file in the TTS Studio folder, then reload this page.';
+  else if (STATE.preview) h = '<b>Preview mode.</b> No voice model is loaded, so Create audio plays a short tone for each line instead of speech. Everything else works: try the controls, and check the pacing and the cleaned-up text.';
   else if (ENGINE === 'chatterbox' && STATE.chatterbox.watermark === false)
     h = '<b>Watermark is off.</b> Chatterbox\'s watermark didn\'t load, so these clips are not marked as AI-generated. In the Python that runs Chatterbox, run <code>pip install "setuptools&lt;81"</code>, then restart the studio.';
   $('banner').innerHTML = h ? `<div class="note">${h}</div>` : '';
 }
+
+/* ── keep the studio running while this page is open; it stops a little after the last tab closes ── */
+const TAB = Math.random().toString(36).slice(2);
+let STOPPED = false;
+function ping(){
+  fetch('/api/ping?tab=' + TAB).then(r => { if (STOPPED && r.ok) { STOPPED = false; banner(); } })
+    .catch(() => { if (!STOPPED) { STOPPED = true; banner(); } });
+}
+setInterval(ping, 15000);
+addEventListener('pagehide', () => navigator.sendBeacon('/api/bye?tab=' + TAB));
+addEventListener('pageshow', ev => { if (ev.persisted) ping(); });  // back from the browser's page cache
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
 
 /* ── settings drawer (phones) ──────────────────────────────────────────────── */
 function drawer(open){
@@ -433,7 +446,7 @@ slider('c_gap_line', C.gap_line, secs); slider('c_gap_head', C.gap_head, secs);
 KNOBS.forEach(k => $('c_' + k).addEventListener('input', markStyle)); markStyle();
 $('c_seed').value = C.seed; $('c_fixes').checked = C.fixes;
 $('text').value = SAMPLE; drawMirror();
-showDownload(); loadPron();
+ping(); showDownload(); loadPron();
 if (STATE.kokoro.download.running) pollDownload();
 showEngine(store.get('engine') === 'chatterbox' ? 'chatterbox' : 'kokoro');
 drawWave();

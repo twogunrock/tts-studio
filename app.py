@@ -32,6 +32,7 @@ DEFAULT_CONFIG = {"model_dir": os.path.join(HERE, "models"), "exports_dir": os.p
 KOKORO_FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 BUILTIN = "(built-in voice)"
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # windowless studio on Windows: don't flash a console per child
 STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".woff2": "font/woff2"}
 DEFAULTS = {
     "kokoro": {"voices": [["af_heart", 0.5], ["af_nova", 0.25], ["af_sarah", 0.25]], "speed": 1.0,
@@ -53,6 +54,49 @@ PORT = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 
 RENDER_LOCK = threading.Lock()
 RENDERS = {}  # render id -> (wav bytes, settings, engine, input text, spoken lines); last 20 kept for saving
 DOWNLOAD = {"running": False, "done": 0, "total": 0, "error": ""}
+
+
+# ── stop when the page is gone (--quit-when-closed, which the start scripts pass) ─────────────────────────────
+# Each open tab pings every 15 s and says goodbye when it closes. Background tabs can be slowed to one ping a
+# minute, so a tab only counts as gone after STALE seconds of silence. A goodbye leaves GRACE seconds for a
+# reload to check back in. Nothing quits mid-render or mid-download.
+class Presence:
+    STALE, GRACE, FIRST = 150, 10, 300  # FIRST: how long to wait for the browser to open the page at all
+    tabs, lock, start, empty_since, seen_any = {}, threading.Lock(), time.time(), None, False
+
+    @classmethod
+    def ping(cls, tab):
+        with cls.lock:
+            cls.tabs[tab], cls.seen_any, cls.empty_since = time.time(), True, None
+
+    @classmethod
+    def bye(cls, tab):
+        with cls.lock:
+            cls.tabs.pop(tab, None)
+            if not cls.tabs:
+                cls.empty_since = time.time()
+
+    @classmethod
+    def should_quit(cls):
+        now = time.time()
+        with cls.lock:
+            for tab, at in list(cls.tabs.items()):
+                if now - at > cls.STALE:
+                    cls.tabs.pop(tab)
+                    if not cls.tabs:
+                        cls.empty_since = now - cls.GRACE
+            if cls.tabs or RENDER_LOCK.locked() or DOWNLOAD["running"]:
+                return False
+            if not cls.seen_any:
+                return now - cls.start > cls.FIRST
+            return cls.empty_since is not None and now - cls.empty_since > cls.GRACE
+
+    @classmethod
+    def watch(cls, server):
+        while not cls.should_quit():
+            time.sleep(5)
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "The studio's page was closed, so TTS Studio stopped.", flush=True)
+        server.shutdown()
 
 
 # ── settings ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -195,7 +239,7 @@ def check_chatterbox(path):
         return {"ok": False, "error": "There's no Python environment in that folder. Pick the folder you installed "
                                       "Chatterbox into (it contains a Scripts or bin folder)."}
     try:
-        r = subprocess.run([py, "-c", CHECK_SCRIPT], capture_output=True, text=True, timeout=180)
+        r = subprocess.run([py, "-c", CHECK_SCRIPT], capture_output=True, text=True, timeout=180, creationflags=NO_WINDOW)
         info = json.loads(r.stdout.strip().splitlines()[-1])
     except Exception:
         return {"ok": False, "python": py, "error": "That Python didn't run the check. It may be broken or not a "
@@ -215,7 +259,8 @@ class Chatterbox:
         c = config()
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", "TTS_STUDIO_DEVICE": c["chatterbox_device"]}
         cls.proc = subprocess.Popen([c["chatterbox_python"], WORKER], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                    stderr=open(LOG, "ab"), text=True, encoding="utf-8", cwd=HERE, env=env)
+                                    stderr=open(LOG, "ab"), text=True, encoding="utf-8", cwd=HERE, env=env,
+                                    creationflags=NO_WINDOW)
         ready = cls._read()
         if not ready.get("ready"):
             cls.stop()
@@ -403,6 +448,9 @@ class H(BaseHTTPRequestHandler):
             if ctype and f.startswith(root + os.sep) and os.path.isfile(f):
                 return self._send(200, open(f, "rb").read(), ctype)
             return self._send(404, "not found")
+        if u.path == "/api/ping":
+            Presence.ping(parse_qs(u.query).get("tab", [""])[0])
+            return self._send(200, "ok")
         if u.path == "/api/state":
             return self._json(state())
         if u.path == "/api/pronunciations":
@@ -418,6 +466,11 @@ class H(BaseHTTPRequestHandler):
         self._send(200, page, "text/html; charset=utf-8")
 
     def do_POST(self):
+        u = urlparse(self.path)
+        if u.path == "/api/bye":  # sent by the page as it closes (navigator.sendBeacon)
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            Presence.bye(parse_qs(u.query).get("tab", [""])[0])
+            return self._send(200, "ok")
         data = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         try:
             if self.path == "/api/render":
@@ -478,6 +531,9 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if sys.stderr is None:  # started without a window (pythonw): messages and errors go to studio.log instead
+        sys.stdout = sys.stderr = open(os.path.join(HERE, "studio.log"), "a", encoding="utf-8", buffering=1)
+    QUIT_WHEN_CLOSED = "--quit-when-closed" in sys.argv
     url = f"http://127.0.0.1:{PORT}"
     try:
         # On Windows SO_REUSEADDR lets a second copy bind the same port silently, so it's off there.
@@ -488,10 +544,13 @@ if __name__ == "__main__":
             import webbrowser; webbrowser.open(url)
         sys.exit(3)  # the start scripts read 3 as "already running", not "stopped"
     mode = "preview mode, no voice model" if PREVIEW else "voice models load on first use"
-    print(f"TTS Studio is running at {url}  ({mode})\nLeave this window open while you use it. Close it to stop the studio.",
-          flush=True)
+    stop = ("It stops by itself once the studio's browser tab has been closed." if QUIT_WHEN_CLOSED
+            else "Press Ctrl+C to stop it.")
+    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} TTS Studio is running at {url}  ({mode}). {stop}", flush=True)
     if "--open" in sys.argv:  # the setup scripts pass this, so a double-click ends in the browser
         import webbrowser; threading.Timer(0.5, webbrowser.open, [url]).start()
+    if QUIT_WHEN_CLOSED:
+        threading.Thread(target=Presence.watch, args=(server,), daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

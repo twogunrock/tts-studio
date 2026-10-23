@@ -1,6 +1,7 @@
 @echo off
 rem Double-click to set up TTS Studio (first time, or after an update) and start it.
 rem Everything goes inside this folder: uv, its own Python, the voice model. To remove TTS Studio, delete the folder.
+rem The studio runs without a window and stops by itself once its browser tab has been closed.
 setlocal
 title TTS Studio
 cd /d "%~dp0"
@@ -9,6 +10,7 @@ set "UV=%HERE%tools\uv\uv.exe"
 set "UV_PYTHON_INSTALL_DIR=%HERE%tools\python"
 set "UV_CACHE_DIR=%HERE%tools\cache"
 set "PY=%HERE%.venv\Scripts\python.exe"
+set "PYW=%HERE%.venv\Scripts\pythonw.exe"
 rem The set-up is current when its copy of requirements.txt matches this one; a changed list means install again.
 set "DONE=%HERE%.venv\installed-requirements.txt"
 
@@ -45,17 +47,15 @@ echo  Setup finished.
 
 :start
 echo.
-"%PY%" "%HERE%app.py" --open
-rem 3 = it was already running; the browser has been opened
-if errorlevel 3 if not errorlevel 4 exit /b 0
-echo.
-echo  TTS Studio has stopped. You can close this window.
-pause >nul
+echo  Opening TTS Studio in your browser. This window closes by itself.
+echo  The studio stops on its own a minute or two after you close its browser tab.
+start "" "%PYW%" "%HERE%app.py" --open --quit-when-closed
+timeout /t 4 /nobreak >nul
 exit /b 0
 
 :failed
 echo.
-echo  Setup didn't finish. If TTS Studio is open in another window, close that window first.
+echo  Setup didn't finish. If TTS Studio is open in your browser, close its tab and wait two minutes first.
 echo  Check your internet connection, then double-click this file again: it picks up where it stopped.
 echo  If it keeps failing, copy the messages above into an issue at
 echo  https://github.com/twogunrock/tts-studio/issues
