@@ -41,6 +41,10 @@ Everything, including its own copy of Python, is installed inside the folder. No
 
 **Comfortable with Python?** You can skip the start file: with Python 3.12, run `pip install -r requirements.txt`, then `python app.py`, and open http://127.0.0.1:7870. Add `--preview` to look around without a voice model (Create audio plays a short tone per line).
 
+## Updates
+
+Once a day, the studio asks GitHub for the newest version number. Nothing else is sent. When there's a newer version, a line above your script offers **What's new** and **Update**. Update replaces the program files, keeps everything that's yours (settings, pronunciations, saved takes, the voice model, voice recordings) and restarts the studio. The previous program files are kept in `tools/update/`. To turn the check off, untick **Check for updates once a day** at the bottom of Voice settings.
+
 ## Where things are kept
 
 Everything stays in the studio's folder:

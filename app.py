@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
 import text_rules as tr
+import updater
 
 try:  # check HTTPS certificates with the computer's own trust store (Windows fetches missing roots on demand; Python alone can't)
     import truststore
@@ -28,7 +29,8 @@ CONFIG, PRESET = os.path.join(HERE, "config.json"), os.path.join(HERE, "preset.j
 WORKER, LOG = os.path.join(HERE, "chatterbox_worker.py"), os.path.join(HERE, "chatterbox.log")
 DEFAULT_CONFIG = {"model_dir": os.path.join(HERE, "models"), "exports_dir": os.path.join(HERE, "exports"),
                   "overrides": os.path.join(HERE, "overrides.json"), "voices_dir": os.path.join(HERE, "voices"),
-                  "chatterbox_python": "", "chatterbox_device": "auto", "chatterbox_check": None}
+                  "chatterbox_python": "", "chatterbox_device": "auto", "chatterbox_check": None,
+                  "check_updates": True}
 KOKORO_FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 BUILTIN = "(built-in voice)"
@@ -54,6 +56,10 @@ PORT = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 
 RENDER_LOCK = threading.Lock()
 RENDERS = {}  # render id -> (wav bytes, settings, engine, input text, spoken lines); last 20 kept for saving
 DOWNLOAD = {"running": False, "done": 0, "total": 0, "error": ""}
+VERSION = open(os.path.join(HERE, "VERSION"), encoding="utf-8").read().strip() if os.path.exists(
+    os.path.join(HERE, "VERSION")) else "0.0.0"
+UPDATE = {"available": None, "notes_url": "", "checked": 0.0, "error": ""}
+RESTART = threading.Event()  # set by a finished update: stop serving, then start again through the start script
 
 
 # ── stop when the page is gone (--quit-when-closed, which the start scripts pass) ─────────────────────────────
@@ -194,6 +200,56 @@ def download_kokoro():
         else:
             DOWNLOAD["error"] = f"The download stopped: {e}. Check the internet connection and try again."
     DOWNLOAD["running"] = False
+
+
+# ── updates (ADR-009): checked at most once a day, only while the setting is on ─────────────────────────────
+def update_info(force=False):
+    on = bool(config().get("check_updates", True))
+    if on and (force or time.time() - UPDATE["checked"] > 86400):
+        UPDATE["checked"] = time.time()
+        try:
+            r = updater.latest(VERSION)
+            newer = updater.parse(r["version"]) > updater.parse(VERSION)
+            UPDATE.update(available=r if newer else None, notes_url=r["notes_url"], error="")
+        except Exception as e:  # offline, no releases yet, GitHub busy: not worth bothering anyone about
+            UPDATE.update(available=None, error=f"{type(e).__name__}: {e}")
+    return {"version": VERSION, "enabled": on, "available": (UPDATE["available"] or {}).get("version") if on else None,
+            "notes_url": UPDATE["notes_url"], "error": UPDATE["error"]}
+
+
+UPDATE_LOCK = threading.Lock()
+
+
+def install_update():
+    if not UPDATE_LOCK.acquire(blocking=False):
+        raise ValueError("An update is already being installed.")
+    try:
+        if RESTART.is_set():  # a second click while the studio restarts must not install the same files twice
+            raise ValueError("The update is installed; the studio is restarting.")
+        if RENDER_LOCK.locked() or DOWNLOAD["running"]:
+            raise ValueError("Wait until the audio or the voice model download finishes, then update.")
+        if not UPDATE["available"]:
+            raise ValueError("There's no update to install.")
+        new = updater.apply(HERE, UPDATE["available"], VERSION)
+        UPDATE["available"] = None
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), f"Updated {VERSION} -> {new}; restarting.", flush=True)
+        RESTART.set()
+        threading.Timer(1.0, SERVER.shutdown).start()  # after the page has its answer
+        return new
+    finally:
+        UPDATE_LOCK.release()
+
+
+def restart_through_script():
+    """Start the studio again the way a double-click does, so a changed requirements.txt gets installed."""
+    env = {**os.environ, "TTS_STUDIO_RESTART": "1"}  # the new copy waits for the port and doesn't open a new tab
+    log = open(os.path.join(HERE, "studio.log"), "ab")
+    if os.name == "nt":
+        cmd = ["cmd", "/c", os.path.join(HERE, "Start TTS Studio (Windows).bat")]
+    else:
+        cmd = ["bash", os.path.join(HERE, "Start TTS Studio (Linux).sh")]
+    subprocess.Popen(cmd, cwd=HERE, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                     creationflags=NO_WINDOW, start_new_session=os.name != "nt")
 
 
 # ── Chatterbox (optional, the user's own install, in its own process) ────────────────────────────────────
@@ -451,6 +507,8 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/api/ping":
             Presence.ping(parse_qs(u.query).get("tab", [""])[0])
             return self._send(200, "ok")
+        if u.path == "/api/update":
+            return self._json(update_info())
         if u.path == "/api/state":
             return self._json(state())
         if u.path == "/api/pronunciations":
@@ -508,6 +566,11 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, f"Saved. Your take is in {d}")
             if self.path == "/api/pronunciations":
                 return self._json(save_pronunciations(data.get("words", [])))
+            if self.path == "/api/update/setting":
+                save_config(check_updates=bool(data.get("on")))
+                return self._json(update_info(force=bool(data.get("on"))))
+            if self.path == "/api/update/install":
+                return self._json({"ok": True, "version": install_update()})
             if self.path == "/api/kokoro/download":
                 if not DOWNLOAD["running"]:
                     threading.Thread(target=download_kokoro, daemon=True).start()
@@ -535,25 +598,34 @@ if __name__ == "__main__":
         sys.stdout = sys.stderr = open(os.path.join(HERE, "studio.log"), "a", encoding="utf-8", buffering=1)
     QUIT_WHEN_CLOSED = "--quit-when-closed" in sys.argv
     url = f"http://127.0.0.1:{PORT}"
-    try:
-        # On Windows SO_REUSEADDR lets a second copy bind the same port silently, so it's off there.
-        server = type("Server", (ThreadingHTTPServer,), {"allow_reuse_address": os.name != "nt"})(("127.0.0.1", PORT), H)
-    except OSError:  # already running (a second double-click): just show it
-        print(f"TTS Studio is already running. Opening {url}", flush=True)
-        if "--open" in sys.argv:
-            import webbrowser; webbrowser.open(url)
-        sys.exit(3)  # the start scripts read 3 as "already running", not "stopped"
+    RESTARTED = bool(os.environ.get("TTS_STUDIO_RESTART"))  # started by an update: the page is already open
+    for attempt in range(30 if RESTARTED else 1):  # after an update, the old copy may still be letting go of the port
+        try:
+            # On Windows SO_REUSEADDR lets a second copy bind the same port silently, so it's off there.
+            SERVER = type("Server", (ThreadingHTTPServer,), {"allow_reuse_address": os.name != "nt"})(("127.0.0.1", PORT), H)
+            break
+        except OSError:
+            if attempt < (29 if RESTARTED else 0):
+                time.sleep(0.5)
+                continue
+            print(f"TTS Studio is already running. Opening {url}", flush=True)  # a second double-click: just show it
+            if "--open" in sys.argv and not RESTARTED:
+                import webbrowser; webbrowser.open(url)
+            sys.exit(3)  # the start scripts read 3 as "already running", not "stopped"
     mode = "preview mode, no voice model" if PREVIEW else "voice models load on first use"
     stop = ("It stops by itself once the studio's browser tab has been closed." if QUIT_WHEN_CLOSED
             else "Press Ctrl+C to stop it.")
-    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} TTS Studio is running at {url}  ({mode}). {stop}", flush=True)
-    if "--open" in sys.argv:  # the setup scripts pass this, so a double-click ends in the browser
+    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} TTS Studio {VERSION} is running at {url}  ({mode}). {stop}", flush=True)
+    if "--open" in sys.argv and not RESTARTED:  # the start scripts pass this, so a double-click ends in the browser
         import webbrowser; threading.Timer(0.5, webbrowser.open, [url]).start()
     if QUIT_WHEN_CLOSED:
-        threading.Thread(target=Presence.watch, args=(server,), daemon=True).start()
+        threading.Thread(target=Presence.watch, args=(SERVER,), daemon=True).start()
     try:
-        server.serve_forever()
+        SERVER.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         Chatterbox.stop()
+        SERVER.server_close()  # let go of the port before the updated copy starts
+    if RESTART.is_set():
+        restart_through_script()

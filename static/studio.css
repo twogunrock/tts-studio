@@ -129,6 +129,12 @@ details.more summary{cursor:pointer;font-weight:500;color:var(--knob)}
 .progress span{display:block;height:100%;width:0;background:var(--knob);transition:width .4s}
 .note{background:var(--note-bg);color:var(--note-ink);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:14.5px}
 .note b{color:inherit}
+.update{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;background:var(--knob-soft);border-radius:10px;
+  padding:10px 12px 10px 16px;margin-bottom:16px;font-size:14.5px}
+.update[hidden]{display:none}
+.update span{flex:1;min-width:200px}
+.update a{font-weight:500}
+.btn.small{min-height:36px;padding:7px 16px}
 .card{background:var(--sheet);border-radius:6px;box-shadow:var(--shadow);padding:22px 26px;margin-bottom:20px}
 .card h2{margin:0 0 6px;font-weight:800;font-size:20px;letter-spacing:-.01em}
 .card h3{margin:16px 0 6px;font-weight:700;font-size:15px}

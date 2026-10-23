@@ -54,15 +54,50 @@ function banner(){
 
 /* ── keep the studio running while this page is open; it stops a little after the last tab closes ── */
 const TAB = Math.random().toString(36).slice(2);
-let STOPPED = false;
+let STOPPED = false, UPDATING = false;  // while an update restarts the studio, a missed check-in is expected
 function ping(){
   fetch('/api/ping?tab=' + TAB).then(r => { if (STOPPED && r.ok) { STOPPED = false; banner(); } })
-    .catch(() => { if (!STOPPED) { STOPPED = true; banner(); } });
+    .catch(() => { if (!STOPPED && !UPDATING) { STOPPED = true; banner(); } });
 }
 setInterval(ping, 15000);
 addEventListener('pagehide', () => navigator.sendBeacon('/api/bye?tab=' + TAB));
 addEventListener('pageshow', ev => { if (ev.persisted) ping(); });  // back from the browser's page cache
 document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
+
+/* ── updates (one click; the server checks GitHub at most once a day, and only while the setting is on) ── */
+function showUpdate(u){
+  $('version').textContent = u.version; $('check-updates').checked = u.enabled;
+  const box = $('update');
+  box.hidden = !u.available;
+  if (!u.available) return;
+  box.innerHTML = `<span>Version ${esc(u.available)} is available.</span>
+    <a href="${esc(u.notes_url)}" target="_blank" rel="noopener">What's new</a>
+    <button class="btn small" type="button" id="update-go">Update</button>`;
+  $('update-go').addEventListener('click', installUpdate);
+}
+async function checkUpdate(){ try { showUpdate(await (await fetch('/api/update')).json()); } catch (e) {} }
+$('check-updates').addEventListener('change', async ev => {
+  showUpdate(await (await api('/api/update/setting', {on: ev.target.checked})).json());
+});
+async function installUpdate(){
+  const box = $('update');
+  box.innerHTML = '<span>Downloading the update…</span>';
+  const r = await api('/api/update/install');
+  if (!r.ok) { box.innerHTML = `<span class="bad">${esc(await r.text())}</span>`; return; }
+  const {version} = await r.json();
+  UPDATING = true;
+  box.innerHTML = `<span>Installed version ${esc(version)}. Restarting the studio… If the update needs new parts, this can take a few minutes.</span>`;
+  const t0 = Date.now();
+  const wait = async () => {  // the page reloads itself once the new version answers
+    try { if ((await (await fetch('/api/update')).json()).version === version) { location.reload(); return; } } catch (e) {}
+    if (Date.now() - t0 > 6 * 60 * 1000) {
+      box.innerHTML = '<span class="bad">The update is installed, but the studio didn\'t come back. Double-click the start file in the TTS Studio folder to open it.</span>';
+      return;
+    }
+    setTimeout(wait, 2000);
+  };
+  setTimeout(wait, 2500);
+}
 
 /* ── settings drawer (phones) ──────────────────────────────────────────────── */
 function drawer(open){
@@ -447,6 +482,7 @@ KNOBS.forEach(k => $('c_' + k).addEventListener('input', markStyle)); markStyle(
 $('c_seed').value = C.seed; $('c_fixes').checked = C.fixes;
 $('text').value = SAMPLE; drawMirror();
 ping(); showDownload(); loadPron();
+checkUpdate(); setInterval(checkUpdate, 6 * 3600 * 1000);  // a studio left open for days still hears about updates
 if (STATE.kokoro.download.running) pollDownload();
 showEngine(store.get('engine') === 'chatterbox' ? 'chatterbox' : 'kokoro');
 drawWave();

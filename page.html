@@ -186,10 +186,17 @@ document.documentElement.setAttribute('data-theme',t);})();</script>
       <button class="pill" type="button" id="remember">Remember these settings</button>
       <p class="hint">Keeps this engine's voice and pacing for next time, so the studio opens the way you left it.</p>
     </div>
+
+    <div class="group about">
+      <p class="hint">TTS Studio <span id="version"></span></p>
+      <label class="check"><input type="checkbox" id="check-updates"><span><b>Check for updates once a day</b>
+        Asks GitHub for the newest version number. Nothing else is sent.</span></label>
+    </div>
   </aside>
 
   <!-- ── The script ─────────────────────────────────────────────────────────── -->
   <div class="stage">
+    <div class="update" id="update" role="status" hidden></div>
     <div id="banner"></div>
 
     <section class="card" id="cb-setup" hidden>
