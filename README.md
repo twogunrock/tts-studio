@@ -6,6 +6,8 @@ Turn a written script into natural-sounding narration, on your own computer. Pas
 
 It's built for people who need a voice-over and don't want to learn audio software: small businesses, trainers, anyone recording the same kind of message more than once.
 
+Made by [Rocky Lott](https://rockylott.com).
+
 ## What it does
 
 - **One line, one piece.** Every line of your script is spoken separately with a pause after it. Don't like one line? Reword it, select it and re-create just that line.
@@ -63,6 +65,7 @@ Kokoro (Apache 2.0) and Chatterbox (MIT) both allow commercial use. Chatterbox m
 
 ## Credits
 
+- Built by [Rocky Lott](https://rockylott.com)
 - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) by hexgrad, run through [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)
 - [Chatterbox](https://github.com/resemble-ai/chatterbox) by Resemble AI
 - Fonts: [Bricolage Grotesque](https://github.com/ateliertriay/bricolage) and [Newsreader](https://github.com/productiontype/Newsreader), SIL Open Font License
