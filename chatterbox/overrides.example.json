@@ -1,8 +1,0 @@
-{
-  "_about": "Copy to overrides.json and edit. 'words' = whole-word swaps applied to every line (case-sensitive).",
-  "words": {
-    "SQL": "sequel",
-    "GUI": "gooey",
-    "ipconfig /all": "I P config slash all"
-  }
-}
