@@ -42,6 +42,27 @@ if ! cmp -s "$HERE/requirements.txt" "$DONE"; then
   echo "  Setup finished."
 fi
 
+# A "TTS Studio" launcher in the app menu and on the desktop (Linux only), made once per folder: deleting it is
+# respected, moving the folder makes a new one.
+make_launcher() {
+  local entry="$HOME/.local/share/applications/tts-studio.desktop" desk
+  mkdir -p "$(dirname "$entry")"
+  printf '%s\n' "[Desktop Entry]" "Type=Application" "Name=TTS Studio" "Comment=Turn a script into narration" \
+    "Exec=\"$HERE/Start TTS Studio (Linux).sh\"" "Icon=$HERE/static/icon-256.png" "Terminal=false" \
+    "Categories=AudioVideo;Audio;" > "$entry"
+  chmod +x "$entry"
+  desk="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
+  if [ -d "$desk" ] && [ "$desk" != "$HOME" ]; then
+    cp "$entry" "$desk/" && chmod +x "$desk/tts-studio.desktop"
+    gio set "$desk/tts-studio.desktop" metadata::trusted true 2>/dev/null  # GNOME: allow launching without asking
+  fi
+  echo "$HERE" > "$HERE/tools/shortcut-made.txt"
+  echo "  TTS Studio is now in your app menu$([ -d "$desk" ] && [ "$desk" != "$HOME" ] && echo " and on your desktop")."
+}
+if [ "$(uname)" = "Linux" ] && [ "$(cat "$HERE/tools/shortcut-made.txt" 2>/dev/null)" != "$HERE" ]; then
+  make_launcher
+fi
+
 echo
 echo "  Opening TTS Studio in your browser. You can close this window."
 echo "  The studio stops on its own a minute or two after you close its browser tab."

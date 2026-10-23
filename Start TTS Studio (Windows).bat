@@ -13,6 +13,8 @@ set "PY=%HERE%.venv\Scripts\python.exe"
 set "PYW=%HERE%.venv\Scripts\pythonw.exe"
 rem The set-up is current when its copy of requirements.txt matches this one; a changed list means install again.
 set "DONE=%HERE%.venv\installed-requirements.txt"
+rem The desktop shortcut is made once per folder: deleting it is respected, moving the folder makes a new one.
+set "MADE=%HERE%tools\shortcut-made.txt"
 
 if not exist "%DONE%" goto setup
 fc /b "%HERE%requirements.txt" "%DONE%" >nul 2>&1
@@ -46,11 +48,22 @@ echo.
 echo  Setup finished.
 
 :start
+set "WAS="
+if exist "%MADE%" set /p WAS=<"%MADE%"
+if /i not "%WAS%"=="%HERE%" call :shortcut
 echo.
 echo  Opening TTS Studio in your browser. This window closes by itself.
 echo  The studio stops on its own a minute or two after you close its browser tab.
 start "" "%PYW%" "%HERE%app.py" --open --quit-when-closed
 timeout /t 4 /nobreak >nul
+exit /b 0
+
+:shortcut
+rem "TTS Studio" on the desktop: runs this file minimized, so a double-click just opens the browser.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$d = [Environment]::GetFolderPath('Desktop'); $s = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'TTS Studio.lnk')); $s.TargetPath = $env:HERE + 'Start TTS Studio (Windows).bat'; $s.WorkingDirectory = $env:HERE; $s.IconLocation = $env:HERE + 'static\icon.ico,0'; $s.WindowStyle = 7; $s.Description = 'TTS Studio: turn a script into narration'; $s.Save()" >nul 2>&1
+if errorlevel 1 exit /b 0
+>"%MADE%" echo %HERE%
+echo  A TTS Studio shortcut is now on your desktop. Use it to open the studio from now on.
 exit /b 0
 
 :failed

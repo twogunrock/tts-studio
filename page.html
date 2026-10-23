@@ -5,6 +5,8 @@
 (function(){var t=null;try{t=localStorage.getItem('tts-studio:theme');}catch(e){}
 if(t!=='light'&&t!=='dark')t=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);})();</script>
+<link rel="icon" href="/static/icon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/static/icon.ico" sizes="any">
 <link rel="stylesheet" href="/static/studio.css">
 </head><body>
 

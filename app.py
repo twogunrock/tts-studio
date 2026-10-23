@@ -35,7 +35,8 @@ KOKORO_FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 BUILTIN = "(built-in voice)"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # windowless studio on Windows: don't flash a console per child
-STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".woff2": "font/woff2"}
+STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".woff2": "font/woff2",
+                ".png": "image/png", ".ico": "image/x-icon"}
 DEFAULTS = {
     "kokoro": {"voices": [["af_heart", 0.5], ["af_nova", 0.25], ["af_sarah", 0.25]], "speed": 1.0,
                "gap_line": 0.25, "gap_head": 0.6, "fixes": True},
