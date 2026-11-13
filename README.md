@@ -72,6 +72,10 @@ Kokoro (Apache 2.0) and Chatterbox (MIT) both allow commercial use. Chatterbox m
 - [Chatterbox](https://github.com/resemble-ai/chatterbox) by Resemble AI
 - Fonts: [Bricolage Grotesque](https://github.com/ateliertriay/bricolage) and [Newsreader](https://github.com/productiontype/Newsreader), SIL Open Font License
 
+## Supporting TTS Studio
+
+TTS Studio is free. If it helps you, you can support Rocky's work on it through [GitHub Sponsors](https://github.com/sponsors/twogunrock).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
